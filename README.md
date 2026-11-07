@@ -33,7 +33,7 @@ The grammar and the semantics follow the HSPICE manuals; see `docs/hspice-refere
 ## Requirements
 
 - Neovim 0.11 or newer (developed against 0.12), or VS Code 1.91 or newer
-- Prebuilt packages (Linux x86_64, macOS arm64, Windows x86_64), or a Rust toolchain plus a C compiler for local builds
+- Prebuilt packages (Linux x86_64/aarch64, macOS arm64, Windows x86_64/arm64), or a Rust toolchain plus a C compiler for local builds
 
 ## Installation
 
@@ -57,13 +57,13 @@ This builds `bin/hspice-lsp` and `parser/hspice.so`. If `tree-sitter-hspice/gram
 
 ### Windows
 
-Neovim: extract `hspice.nvim-windows-x86_64.zip`, e.g. to `%LOCALAPPDATA%\nvim-data\hspice.nvim`, and use forward slashes in the lazy.nvim spec:
+Neovim: extract `hspice.nvim-windows-x86_64.zip` (`hspice.nvim-windows-arm64.zip` on ARM devices), e.g. to `%LOCALAPPDATA%\nvim-data\hspice.nvim`, and use forward slashes in the lazy.nvim spec:
 
 ```lua
 { dir = "C:/Users/<you>/AppData/Local/nvim-data/hspice.nvim", lazy = false, opts = {} }
 ```
 
-VS Code: install `hspice-vscode-win32-x64.vsix` (see below).
+VS Code: install `hspice-vscode-win32-x64.vsix` (`hspice-vscode-win32-arm64.vsix` on ARM devices, see below).
 
 To build locally, install the Rust MSVC toolchain, the Visual Studio C++ Build Tools and the tree-sitter CLI (`npm install -g tree-sitter-cli@0.27.1`), then run in PowerShell from the checkout:
 
@@ -78,7 +78,7 @@ Include paths may use `\` or `/`. A leading `~` expands to `%USERPROFILE%` when 
 
 ### VS Code
 
-Install the package for your platform (`hspice-vscode-linux-x64.vsix`, `-darwin-arm64` or `-win32-x64`) with **Extensions: Install from VSIX…** or `code --install-extension hspice-vscode-<target>.vsix`. It bundles the server.
+Install the package for your platform (`hspice-vscode-linux-x64.vsix`, `-linux-arm64`, `-darwin-arm64`, `-win32-x64` or `-win32-arm64`) with **Extensions: Install from VSIX…** or `code --install-extension hspice-vscode-<target>.vsix`. It bundles the server.
 
 To package it yourself (Node.js 22+, Git Bash on Windows), build the server and run e.g. `scripts/package-vscode.sh darwin-arm64 bin/hspice-lsp`. The `.vsix` ends up in `dist/`.
 
