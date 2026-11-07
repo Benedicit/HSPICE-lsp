@@ -1,0 +1,27 @@
+============================================================
+Upper and mixed case keywords
+============================================================
+.SUBCKT Inv IN OUT
+.Ends INV
+.PARAM X=1
+.Include 'a.sp'
+
+------------------------------------------------------------
+
+(source_file
+  (subckt_command
+    (command_name)
+    (word)
+    (word)
+    (word))
+  (ends_command
+    (command_name)
+    (word))
+  (param_command
+    (command_name)
+    (param_definition
+      (identifier)
+      (number)))
+  (include_command
+    (command_name)
+    (string)))

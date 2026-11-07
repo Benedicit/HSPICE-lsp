@@ -1,0 +1,22 @@
+[package]
+name = "hspice-lsp"
+description = "Language server for Synopsys HSPICE netlists"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+ls-types = "0.0.6"
+lsp-server = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tree-sitter = "0.27.1"
+tree-sitter-hspice = { path = "../tree-sitter-hspice" }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"

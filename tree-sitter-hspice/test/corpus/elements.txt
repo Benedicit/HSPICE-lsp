@@ -1,0 +1,300 @@
+============================================================
+Resistor capacitor inductor
+============================================================
+R1 a b 10k
+C1 a 0 1p
+L1 a b 1n
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (word)
+    (number))
+  (element
+    (element_name)
+    (word)
+    (number)
+    (number))
+  (element
+    (element_name)
+    (word)
+    (word)
+    (number)))
+
+============================================================
+Resistor with expression value
+============================================================
+R2 a b r=sqrt(hertz) tc1=1e-3
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (word)
+    (assignment
+      (word)
+      (call_expression
+        (identifier)
+        (identifier)))
+    (assignment
+      (word)
+      (number))))
+
+============================================================
+Bare parameter value
+============================================================
+Rload out 0 rval
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (number)
+    (word)))
+
+============================================================
+MOSFET
+============================================================
+M1 out in vdd vdd pch W=wp L=45n m=2
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word)
+    (word)
+    (word)
+    (assignment
+      (word)
+      (identifier))
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number))))
+
+============================================================
+MOSFET with string model
+============================================================
+M2 d g s b str(pmod) w=1u
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word)
+    (word)
+    (call
+      (word)
+      (word))
+    (assignment
+      (word)
+      (number))))
+
+============================================================
+BJT with digit-first model name
+============================================================
+Q1 c b e 2N2222
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word)
+    (word)))
+
+============================================================
+Diode and JFET
+============================================================
+D1 a k dmod 2
+J1 d g s jmod
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word)
+    (number))
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word)
+    (word)))
+
+============================================================
+Subcircuit instance
+============================================================
+X1 in out vdd 0 inv wn=wn wp='2*wn'
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word)
+    (number)
+    (word)
+    (assignment
+      (word)
+      (identifier))
+    (assignment
+      (word)
+      (quoted_expression
+        (binary_expression
+          (number)
+          (identifier))))))
+
+============================================================
+Mutual inductance
+============================================================
+K1 L1 L2 0.9
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (word)
+    (number)))
+
+============================================================
+Controlled sources
+============================================================
+E1 out 0 in 0 10
+E2 out 0 VOL='v(in)*2'
+E3 o 0 POLY(2) a 0 b 0 0 1 1
+G1 x 0 cur=20m*v(a,c)
+F1 a b vsense 2
+H1 a b vsense 1k
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (number)
+    (word)
+    (number)
+    (number))
+  (element
+    (element_name)
+    (word)
+    (number)
+    (assignment
+      (word)
+      (quoted_expression
+        (binary_expression
+          (call_expression
+            (identifier)
+            (identifier))
+          (number)))))
+  (element
+    (element_name)
+    (word)
+    (number)
+    (call
+      (word)
+      (number))
+    (word)
+    (number)
+    (word)
+    (number)
+    (number)
+    (number)
+    (number))
+  (element
+    (element_name)
+    (word)
+    (number)
+    (assignment
+      (word)
+      (binary_expression
+        (number)
+        (call_expression
+          (identifier)
+          (identifier)
+          (identifier)))))
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word)
+    (number))
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word)
+    (number)))
+
+============================================================
+Node names with special characters
+============================================================
+R1 gnd! a<3> 1k
+R2 x[1] n-1 1k
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (word)
+    (number))
+  (element
+    (element_name)
+    (word)
+    (word)
+    (number)))
+
+============================================================
+Element at end of file without newline
+============================================================
+R1 a b 1k
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (word)
+    (number)))
+
+============================================================
+Words that look like file keys
+============================================================
+X1 search file inv
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word)))

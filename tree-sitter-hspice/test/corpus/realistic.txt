@@ -1,0 +1,347 @@
+============================================================
+Calibre PEX netlist
+============================================================
+* File: INV.pex.netlist
+* Created: Mon Oct 12 2026
+* Program "Calibre xRC"
+.include "INV.pex.netlist.INV.pxi"
+*
+.subckt INV  IN OUT VDD VSS
+*
+* VSS	VSS
+MM0 N_OUT_MM0_d N_IN_MM0_g N_VSS_MM0_s N_VSS_MM0_b NMOS_VTL L=5e-08 W=9e-08
++ AD=9.45e-15 AS=9.45e-15 PD=3.9e-07 PS=3.9e-07 $X=-25 $Y=-15 $D=1
+MM1 N_OUT_MM1_d N_IN_MM1_g N_VDD_MM1_s N_VDD_MM1_b PMOS_VTL L=5e-08 W=1.35e-07
++ AD=1.4175e-14 AS=1.4175e-14 PD=4.8e-07 PS=4.8e-07 $X=-25 $Y=715 $D=0
+c_1 N_IN_c_1_n 0 0.0127f
+r_2 N_OUT_1 N_OUT_2 15.3
+x_PM_INV%IN N_IN_c_1_n N_IN_MM0_g N_IN_MM1_g IN PM_INV%IN
+*
+.include "INV.pex.netlist.INV.pxi"
+*
+.ends
+*
+*
+
+------------------------------------------------------------
+
+(source_file
+  (comment)
+  (comment)
+  (comment)
+  (include_command
+    (command_name)
+    (string))
+  (comment)
+  (subckt_command
+    (command_name)
+    (word)
+    (word)
+    (word)
+    (word)
+    (word))
+  (comment)
+  (comment)
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word)
+    (word)
+    (word)
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number))
+    (line_continuation)
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number)))
+  (inline_comment)
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word)
+    (word)
+    (word)
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number))
+    (line_continuation)
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number)))
+  (inline_comment)
+  (element
+    (element_name)
+    (word)
+    (number)
+    (number))
+  (element
+    (element_name)
+    (word)
+    (word)
+    (number))
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word)
+    (word)
+    (word))
+  (comment)
+  (include_command
+    (command_name)
+    (string))
+  (comment)
+  (ends_command
+    (command_name))
+  (comment)
+  (comment))
+
+============================================================
+Op-amp AC testbench without title masking
+============================================================
+Two-stage opamp AC testbench
+.lib '/eda/pdk/hspice/models.lib' TT
+.temp 27
+.option post=2 accurate=1 ingold=2 numdgt=6 probe
+.param vdd=1.8 vcm='vdd/2' cl=2p ibias=20u
+.global vdd! gnd!
+VDD vdd! gnd! vdd
+VCM cm gnd! vcm
+VIN inp cm DC 0 AC 1 0
+EINN inn cm inp cm -1
+IBIAS vdd! bias ibias
+XOPA inp inn out bias vdd! gnd! opamp L1=0.18u W1=2u
+CL out gnd! cl
+.ac dec 20 1 10g
+.noise v(out) VIN 10
+.pz v(out) VIN
+.op
+.meas ac a0 find vdb(out) at=1
+.meas ac ugf when vdb(out)=0
+.meas ac pm find vp(out) when vdb(out)=0
+.meas ac pm_deg param='180+pm'
+.probe ac vdb(out) vp(out) lx4(xopa.m1)
+.alter slow corner
+.lib '/eda/pdk/hspice/models.lib' SS
+.temp 85
+.end
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word))
+  (lib_command
+    (command_name)
+    (string)
+    (word))
+  (generic_command
+    (command_name)
+    (number))
+  (option_command
+    (command_name)
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number))
+    (word))
+  (param_command
+    (command_name)
+    (param_definition
+      (identifier)
+      (number))
+    (param_definition
+      (identifier)
+      (quoted_expression
+        (binary_expression
+          (identifier)
+          (number))))
+    (param_definition
+      (identifier)
+      (number))
+    (param_definition
+      (identifier)
+      (number)))
+  (global_command
+    (command_name)
+    (word)
+    (word))
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word))
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word))
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word)
+    (number)
+    (word)
+    (number)
+    (number))
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word)
+    (word)
+    (number))
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word))
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word)
+    (word)
+    (word)
+    (word)
+    (word)
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number)))
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word))
+  (generic_command
+    (command_name)
+    (word)
+    (number)
+    (number)
+    (number))
+  (generic_command
+    (command_name)
+    (call
+      (word)
+      (word))
+    (word)
+    (number))
+  (generic_command
+    (command_name)
+    (call
+      (word)
+      (word))
+    (word))
+  (generic_command
+    (command_name))
+  (generic_command
+    (command_name)
+    (word)
+    (word)
+    (word)
+    (call
+      (word)
+      (word))
+    (assignment
+      (word)
+      (number)))
+  (generic_command
+    (command_name)
+    (word)
+    (word)
+    (word)
+    (assignment
+      (call
+        (word)
+        (word))
+      (number)))
+  (generic_command
+    (command_name)
+    (word)
+    (word)
+    (word)
+    (call
+      (word)
+      (word))
+    (word)
+    (assignment
+      (call
+        (word)
+        (word))
+      (number)))
+  (generic_command
+    (command_name)
+    (word)
+    (word)
+    (assignment
+      (word)
+      (quoted_expression
+        (binary_expression
+          (number)
+          (identifier)))))
+  (generic_command
+    (command_name)
+    (word)
+    (call
+      (word)
+      (word))
+    (call
+      (word)
+      (word))
+    (call
+      (word)
+      (word)))
+  (alter_command
+    (command_name)
+    (text))
+  (lib_command
+    (command_name)
+    (string)
+    (word))
+  (generic_command
+    (command_name)
+    (number))
+  (end_command
+    (command_name)))

@@ -1,0 +1,119 @@
+============================================================
+DC source
+============================================================
+Vdd vdd 0 1.8
+Vdc a 0 DC=1.2
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (number)
+    (number))
+  (element
+    (element_name)
+    (word)
+    (number)
+    (assignment
+      (word)
+      (number))))
+
+============================================================
+Quoted source value
+============================================================
+Vdd vdd 0 'supply'
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (number)
+    (quoted_expression
+      (identifier))))
+
+============================================================
+Pulse with parentheses
+============================================================
+Vin in 0 PULSE(0 'vdd' 0 20p 20p 1n 2n)
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (number)
+    (call
+      (word)
+      (number)
+      (quoted_expression
+        (identifier))
+      (number)
+      (number)
+      (number)
+      (number)
+      (number))))
+
+============================================================
+Sin without parentheses and AC list
+============================================================
+Vac a 0 DC 0 AC 1,90 SIN 0 1 1meg
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (number)
+    (word)
+    (number)
+    (word)
+    (number)
+    (number)
+    (word)
+    (number)
+    (number)
+    (number)))
+
+============================================================
+Piecewise linear
+============================================================
+I1 a 0 PWL(0 0 1n 1m 2n 0) R=0
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (number)
+    (call
+      (word)
+      (number)
+      (number)
+      (number)
+      (number)
+      (number)
+      (number))
+    (assignment
+      (word)
+      (number))))
+
+============================================================
+Negative values
+============================================================
+V1 a 0 -1.8
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (number)
+    (number)))

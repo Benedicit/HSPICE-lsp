@@ -1,0 +1,139 @@
+# Tests run on every push and pull request; release builds for Linux, macOS and Windows run in
+# parallel only after the tests pass on a push to main (which includes merged pull requests).
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  TREE_SITTER_CLI_VERSION: 0.27.1
+  NEOVIM_VERSION: v0.12.6
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install tree-sitter CLI
+        run: npm install --global "tree-sitter-cli@${TREE_SITTER_CLI_VERSION}"
+
+      - name: Check that the generated parser matches grammar.js
+        working-directory: tree-sitter-hspice
+        run: |
+          tree-sitter generate
+          git diff --exit-code -- src
+
+      - name: Grammar corpus tests
+        working-directory: tree-sitter-hspice
+        run: tree-sitter test
+
+      - name: Formatting
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Unit and end-to-end tests
+        run: cargo test --locked --all
+
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: ${{ env.NEOVIM_VERSION }}
+
+      - name: Neovim smoke test
+        run: |
+          scripts/build-local.sh
+          nvim --headless --clean -u NONE -l scripts/nvim-smoke.lua
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            binary: hspice-lsp
+            parser: hspice.so
+          - name: macos-arm64
+            os: macos-latest
+            target: aarch64-apple-darwin
+            binary: hspice-lsp
+            parser: hspice.so
+          - name: windows-x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: hspice-lsp.exe
+            parser: hspice.dll
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install musl tools
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install --yes musl-tools
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install tree-sitter CLI
+        run: npm install --global "tree-sitter-cli@${TREE_SITTER_CLI_VERSION}"
+
+      - name: Build language server
+        run: cargo build --locked --release --target "${{ matrix.target }}" -p hspice-lsp
+
+      - name: Build tree-sitter parser
+        run: tree-sitter build --output "parser-build/${{ matrix.parser }}" tree-sitter-hspice
+
+      - name: Check Linux artefacts are portable
+        if: runner.os == 'Linux'
+        run: |
+          file "target/${{ matrix.target }}/release/${{ matrix.binary }}" | tee /dev/stderr | grep -Eq "statically linked|static-pie linked"
+          if objdump -T "parser-build/${{ matrix.parser }}" | grep -q "GLIBC_"; then
+            echo "parser links against glibc symbols" >&2
+            exit 1
+          fi
+
+      - name: Package plugin
+        run: scripts/package.sh "${{ matrix.name }}" "target/${{ matrix.target }}/release/${{ matrix.binary }}" "parser-build/${{ matrix.parser }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hspice.nvim-${{ matrix.name }}
+          path: dist/hspice.nvim-${{ matrix.name }}.*
+          if-no-files-found: error

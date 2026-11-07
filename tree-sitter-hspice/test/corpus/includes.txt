@@ -1,0 +1,66 @@
+============================================================
+Include quoted and unquoted
+============================================================
+.include "cells/inv.inc"
+.inc ../x.inc
+.INCL '/abs/path.sp'
+
+------------------------------------------------------------
+
+(source_file
+  (include_command
+    (command_name)
+    (string))
+  (include_command
+    (command_name)
+    (path_word))
+  (include_command
+    (command_name)
+    (string)))
+
+============================================================
+Library call
+============================================================
+.lib 'models/tech.lib' tt
+.LIB models.lib ff
+
+------------------------------------------------------------
+
+(source_file
+  (lib_command
+    (command_name)
+    (string)
+    (word))
+  (lib_command
+    (command_name)
+    (path_word)
+    (word)))
+
+============================================================
+Library definition
+============================================================
+.lib tt
+.endl tt
+
+------------------------------------------------------------
+
+(source_file
+  (lib_command
+    (command_name)
+    (word))
+  (endl_command
+    (command_name)
+    (word)))
+
+============================================================
+HDL
+============================================================
+.hdl "amp.va" amp
+
+------------------------------------------------------------
+
+(source_file
+  (hdl_command
+    (command_name)
+    (string)
+    (word)))

@@ -1,0 +1,97 @@
+============================================================
+Plus continuation
+============================================================
+M1 d g s b nch
++ W=1u L=0.1u
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (word)
+    (word)
+    (word)
+    (word)
+    (line_continuation)
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number))))
+
+============================================================
+Indented plus continuation
+============================================================
+R1 a b
+   + 1k
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (word)
+    (line_continuation)
+    (number)))
+
+============================================================
+Comment lines between a card and its continuation
+============================================================
+.model n1 nmos
+* note
+$ other note
++ level=3
+
+------------------------------------------------------------
+
+(source_file
+  (model_command
+    (command_name)
+    (word)
+    (word)
+    (line_continuation)
+    (assignment
+      (word)
+      (number))))
+
+============================================================
+Backslash continuation
+============================================================
+R1 a b \
+ 1k
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (word)
+    (backslash_continuation)
+    (number)))
+
+============================================================
+Comment line not followed by continuation ends the card
+============================================================
+R1 a b 1k
+* note
+R2 a b 2k
+
+------------------------------------------------------------
+
+(source_file
+  (element
+    (element_name)
+    (word)
+    (word)
+    (number))
+  (comment)
+  (element
+    (element_name)
+    (word)
+    (word)
+    (number)))

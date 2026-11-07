@@ -1,0 +1,24 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/config.schema.json",
+  "grammars": [
+    {
+      "name": "hspice",
+      "camelcase": "Hspice",
+      "title": "HSPICE",
+      "scope": "source.hspice",
+      "file-types": ["sp", "spice", "inc", "pm"],
+      "highlights": "../queries/hspice/highlights.scm",
+      "injection-regex": "^hspice$"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "HSPICE netlist grammar for tree-sitter",
+    "links": { "repository": "https://github.com/local/hspice.nvim" }
+  },
+  "bindings": {
+    "c": false, "go": false, "java": false, "kotlin": false, "node": false,
+    "python": false, "rust": true, "swift": false, "zig": false
+  }
+}

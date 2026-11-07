@@ -1,0 +1,319 @@
+============================================================
+Analyses
+============================================================
+.tran 1p 4n sweep temp -40 125 10
+.ac dec 10 1 1g
+.dc vin 0 1.8 0.01
+.op
+
+------------------------------------------------------------
+
+(source_file
+  (generic_command
+    (command_name)
+    (number)
+    (number)
+    (word)
+    (word)
+    (number)
+    (number)
+    (number))
+  (generic_command
+    (command_name)
+    (word)
+    (number)
+    (number)
+    (number))
+  (generic_command
+    (command_name)
+    (word)
+    (number)
+    (number)
+    (number))
+  (generic_command
+    (command_name)))
+
+============================================================
+Measure
+============================================================
+.measure tran tphl trig v(in) val='vdd/2' rise=1 targ v(out) val='vdd/2' fall=1
+
+------------------------------------------------------------
+
+(source_file
+  (generic_command
+    (command_name)
+    (word)
+    (word)
+    (word)
+    (call
+      (word)
+      (word))
+    (assignment
+      (word)
+      (quoted_expression
+        (binary_expression
+          (identifier)
+          (number))))
+    (assignment
+      (word)
+      (number))
+    (word)
+    (call
+      (word)
+      (word))
+    (assignment
+      (word)
+      (quoted_expression
+        (binary_expression
+          (identifier)
+          (number))))
+    (assignment
+      (word)
+      (number))))
+
+============================================================
+Print and probe
+============================================================
+.print tran v(in) v(x1.out) i(vdd) par('a*b')
+.probe v(out)
+
+------------------------------------------------------------
+
+(source_file
+  (generic_command
+    (command_name)
+    (word)
+    (call
+      (word)
+      (word))
+    (call
+      (word)
+      (word))
+    (call
+      (word)
+      (word))
+    (call
+      (word)
+      (quoted_expression
+        (binary_expression
+          (identifier)
+          (identifier)))))
+  (generic_command
+    (command_name)
+    (call
+      (word)
+      (word))))
+
+============================================================
+Initial conditions
+============================================================
+.ic v(out)=0 v(in)=1.8
+
+------------------------------------------------------------
+
+(source_file
+  (generic_command
+    (command_name)
+    (assignment
+      (call
+        (word)
+        (word))
+      (number))
+    (assignment
+      (call
+        (word)
+        (word))
+      (number))))
+
+============================================================
+Options
+============================================================
+.option post=2 probe search='/eda/pdk'
+.OPT list
+
+------------------------------------------------------------
+
+(source_file
+  (option_command
+    (command_name)
+    (assignment
+      (word)
+      (number))
+    (word)
+    (file_assignment
+      (word)
+      (string)))
+  (option_command
+    (command_name)
+    (word)))
+
+============================================================
+Global
+============================================================
+.global vdd gnd!
+
+------------------------------------------------------------
+
+(source_file
+  (global_command
+    (command_name)
+    (word)
+    (word)))
+
+============================================================
+Subcircuit definition
+============================================================
+.subckt inv in out vdd gnd wn=200n wp=400n
+.ends inv
+
+------------------------------------------------------------
+
+(source_file
+  (subckt_command
+    (command_name)
+    (word)
+    (word)
+    (word)
+    (word)
+    (word)
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number)))
+  (ends_command
+    (command_name)
+    (word)))
+
+============================================================
+Macro aliases
+============================================================
+.MACRO buf a b
+.EOM
+
+------------------------------------------------------------
+
+(source_file
+  (subckt_command
+    (command_name)
+    (word)
+    (word)
+    (word))
+  (ends_command
+    (command_name)))
+
+============================================================
+If blocks
+============================================================
+.if (corner==1)
+.elseif (corner>=2 && x!=3)
+.else
+.endif
+
+------------------------------------------------------------
+
+(source_file
+  (if_command
+    (command_name)
+    (parenthesized_expression
+      (binary_expression
+        (identifier)
+        (number))))
+  (elseif_command
+    (command_name)
+    (parenthesized_expression
+      (binary_expression
+        (binary_expression
+          (identifier)
+          (number))
+        (binary_expression
+          (identifier)
+          (number)))))
+  (else_command
+    (command_name))
+  (endif_command
+    (command_name)))
+
+============================================================
+Data block
+============================================================
+.data d1 wn wp
++ 1u 2u
++ 2u 4u
+.enddata
+
+------------------------------------------------------------
+
+(source_file
+  (generic_command
+    (command_name)
+    (word)
+    (word)
+    (word)
+    (line_continuation)
+    (number)
+    (number)
+    (line_continuation)
+    (number)
+    (number))
+  (generic_command
+    (command_name)))
+
+============================================================
+Title alter and end
+============================================================
+.title My circuit
+.alter second run
+.end trailing comment
+
+------------------------------------------------------------
+
+(source_file
+  (title_command
+    (command_name)
+    (text))
+  (alter_command
+    (command_name)
+    (text))
+  (end_command
+    (command_name)
+    (comment)))
+
+============================================================
+End-like generic commands
+============================================================
+.end_variation
+.enddata
+.endx
+
+------------------------------------------------------------
+
+(source_file
+  (generic_command
+    (command_name))
+  (generic_command
+    (command_name))
+  (generic_command
+    (command_name)))
+
+============================================================
+Protected block with plaintext
+============================================================
+.prot
+R1 a b 1k
+.unprot
+
+------------------------------------------------------------
+
+(source_file
+  (generic_command
+    (command_name))
+  (element
+    (element_name)
+    (word)
+    (word)
+    (number))
+  (generic_command
+    (command_name)))

@@ -1,0 +1,18 @@
+* Process corner library for the 45nm course technology
+.lib tt
+* typical-typical corner
+.param vth_shift=0 mobility_scale=1
+.include 'ptm45.pm'
+.endl tt
+
+.lib ff
+* fast-fast corner
+.param vth_shift=-0.03 mobility_scale=1.1
+.include 'ptm45.pm'
+.endl ff
+
+.lib ss
+* slow-slow corner
+.param vth_shift=0.03 mobility_scale=0.9
+.include 'ptm45.pm'
+.endl ss

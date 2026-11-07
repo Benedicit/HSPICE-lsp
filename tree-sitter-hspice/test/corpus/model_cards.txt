@@ -1,0 +1,66 @@
+============================================================
+Binned model with continuation
+============================================================
+.model nch.1 nmos level=54 vth0=0.4
++ toxe = 1.2e-9 lmin=-1e-6
+
+------------------------------------------------------------
+
+(source_file
+  (model_command
+    (command_name)
+    (word)
+    (word)
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number))
+    (line_continuation)
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (unary_expression
+        (number)))))
+
+============================================================
+Model with parenthesized parameters
+============================================================
+.model dmod d (is=1e-14 n=1.05)
+
+------------------------------------------------------------
+
+(source_file
+  (model_command
+    (command_name)
+    (word)
+    (word)
+    (parenthesized
+      (assignment
+        (word)
+        (number))
+      (assignment
+        (word)
+        (number)))))
+
+============================================================
+Monte Carlo tolerance key
+============================================================
+.model n1 nmos vth0=0.5 dev/gauss=0.01
+
+------------------------------------------------------------
+
+(source_file
+  (model_command
+    (command_name)
+    (word)
+    (word)
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number))))
