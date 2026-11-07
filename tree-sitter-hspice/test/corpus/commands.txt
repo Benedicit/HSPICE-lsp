@@ -317,3 +317,83 @@ R1 a b 1k
     (number))
   (generic_command
     (command_name)))
+
+============================================================
+Value lists and wildcards
+============================================================
+.noise v(out) vin 10 listfreq=(1k 10k)
+.tran 1n 10n sweep monte=list(10 20:30)
+.layerstack ls layer=(m1,0.5u)
+.option x=(1k)
+.probe tran v(*) i(*)
+
+------------------------------------------------------------
+
+(source_file
+  (generic_command
+    (command_name)
+    (call
+      (word)
+      (word))
+    (word)
+    (number)
+    (assignment
+      (word)
+      (value_list
+        (number)
+        (number))))
+  (generic_command
+    (command_name)
+    (number)
+    (number)
+    (word)
+    (assignment
+      (word)
+      (value_list
+        (identifier)
+        (number)
+        (number)
+        (number))))
+  (generic_command
+    (command_name)
+    (word)
+    (assignment
+      (word)
+      (value_list
+        (identifier)
+        (number))))
+  (option_command
+    (command_name)
+    (assignment
+      (word)
+      (parenthesized_expression
+        (number))))
+  (generic_command
+    (command_name)
+    (word)
+    (call
+      (word)
+      (word))
+    (call
+      (word)
+      (word))))
+
+============================================================
+Subcircuit with parenthesised ports
+============================================================
+.subckt inv (a y) w=1u
+.ends
+
+------------------------------------------------------------
+
+(source_file
+  (subckt_command
+    (command_name)
+    (word)
+    (word)
+    (word)
+    (assignment
+      (word)
+      (number)))
+  (ends_command
+    (command_name)))

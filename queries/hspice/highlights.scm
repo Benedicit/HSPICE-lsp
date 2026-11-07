@@ -70,6 +70,9 @@
 (call_expression
   function: (identifier) @function.call)
 
+(value_list
+  function: (identifier) @function.builtin)
+
 ((call
   function: (word) @function.builtin)
   (#match? @function.builtin "\\c\\v^(pulse|pu|sin|exp|pwl|pl|pwlz|sffm|am|pat|lfsr|poly|v|vr|vi|vm|vp|vdb|vt|i|i[1-4]|ir|ii|im|ip|idb|it|p|par|str|lv[0-9]+|lx[0-9]+)$"))

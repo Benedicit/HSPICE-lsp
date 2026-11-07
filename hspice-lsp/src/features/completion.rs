@@ -664,6 +664,20 @@ mod tests {
     }
 
     #[test]
+    fn completes_on_crlf_continuation_lines() {
+        let opened = open("* t\r\n.subckt inv in out\r\n.ends\r\nX1 a\r\n+ b i|");
+        let items = complete(&opened);
+        let inv = items.iter().find(|item| item.label == "inv").expect("inv");
+        match &inv.text_edit {
+            Some(CompletionTextEdit::Edit(edit)) => {
+                assert_eq!(edit.range.start.line, opened.position.line);
+                assert_eq!(edit.range.start.character, opened.position.character - 1);
+            }
+            _ => panic!("expected a text edit"),
+        }
+    }
+
+    #[test]
     fn completes_x_instance_params_after_subckt_name() {
         let found = labels("* t\n.subckt inv in out wn=1u wp=2u\n.ends\nX1 a b inv |");
         assert!(has(&found, "wn="));

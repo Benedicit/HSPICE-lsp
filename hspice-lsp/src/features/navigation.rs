@@ -9,7 +9,7 @@ use ls_types::{
 };
 
 use super::{symbol_location, to_lsp_range, to_offset};
-use crate::analysis::includes::summarize;
+use crate::analysis::includes::{read_source, summarize};
 use crate::analysis::symbols::{Origin, ROOT_SCOPE, ScopeId, Symbol, SymbolId, SymbolKind};
 use crate::analysis::{ExternalContext, IncludeResolution, analyze};
 use crate::lang::elements::is_ground;
@@ -267,7 +267,7 @@ fn closed_home_occurrences(workspace: &Workspace, target: &Target) -> Vec<Occurr
     {
         return Vec::new();
     }
-    let (Ok(text), Some(uri)) = (std::fs::read_to_string(home), Uri::from_file_path(home)) else {
+    let (Ok(text), Some(uri)) = (read_source(home), Uri::from_file_path(home)) else {
         return Vec::new();
     };
     let syntax = parse_document(&text, has_end_statement(&text));
@@ -426,7 +426,7 @@ fn file_text(workspace: &Workspace, path: &Path) -> Option<String> {
         .documents()
         .find(|document| document.path.as_deref() == Some(path))
         .map(|document| document.text.clone())
-        .or_else(|| std::fs::read_to_string(path).ok())
+        .or_else(|| read_source(path).ok())
 }
 
 /// Locates the definition(s) of the symbol under the cursor; binned base names give all bins.

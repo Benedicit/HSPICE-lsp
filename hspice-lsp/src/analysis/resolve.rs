@@ -14,8 +14,8 @@ use crate::lang::measure::{ANALYSIS_KEYWORDS, ANALYSIS_TYPES, MEASURE_KEYWORDS};
 use crate::lang::output_vars::{OutputArgKind, find_output_var};
 use crate::lang::{KeywordSpec, find_named};
 use crate::syntax::ast::{
-    Arg, AssignKey, Call, Command, CommandKind, Element, Expr, ExprKind, Ident, Netlist, ParamDef,
-    StatementKind, Value,
+    Arg, AssignKey, Assignment, Call, Command, CommandKind, Element, Expr, ExprKind, Ident,
+    Netlist, ParamDef, StatementKind, Value,
 };
 
 /// Role information of one element line.
@@ -743,10 +743,9 @@ impl Collector<'_> {
     /// * `index` - statement index
     /// * `element` - lowered element
     fn element_refs(&self, index: usize, element: &Element) -> Vec<Pending> {
-        let Some(position) = self
+        let Ok(position) = self
             .elements
-            .iter()
-            .position(|info| info.statement == index)
+            .binary_search_by_key(&index, |info| info.statement)
         else {
             return Vec::new();
         };
@@ -1042,8 +1041,10 @@ impl Collector<'_> {
                 .map(|source| vec![Pending::new(ELEMENT, source, scope, RefContext::Sweep)])
                 .unwrap_or_default(),
             ".meas" | ".measure" => measure_refs(args, scope),
-            ".print" | ".probe" | ".plot" | ".graph" | ".ic" | ".nodeset" | ".dcvolt" | ".four"
-            | ".fft" => assignment_value_refs(args, scope),
+            ".print" | ".probe" | ".plot" | ".graph" | ".ic" | ".nodeset" | ".dcvolt" | ".four" => {
+                assignment_value_refs(args, scope)
+            }
+            ".fft" => assignment_value_refs(&without_keys(args, FFT_WORD_KEYS), scope),
             _ => Vec::new(),
         };
         outputs.chain(specific).collect()
@@ -1112,6 +1113,27 @@ fn output_refs(call: &Call, scope: ScopeId) -> Vec<Pending> {
     call_words(call)
         .filter(|word| !word.text.contains(['.', '*', '?', ':']) && !is_ground(&word.text))
         .map(|word| Pending::new(kinds, word, scope, RefContext::Output))
+        .collect()
+}
+
+/// `.fft` keys whose values are keywords such as `HANN` or `NORM`, not expressions.
+const FFT_WORD_KEYS: &[&str] = &["window", "format"];
+
+/// Returns the arguments without the assignments to the given keys.
+///
+/// # Arguments
+/// * `args` - command arguments
+/// * `keys` - lowercase keys to drop
+fn without_keys(args: &[Arg], keys: &[&str]) -> Vec<Arg> {
+    args.iter()
+        .filter(|arg| match arg {
+            Arg::Assign(Assignment {
+                key: AssignKey::Name(key),
+                ..
+            }) => !keys.contains(&key.key.as_str()),
+            _ => true,
+        })
+        .cloned()
         .collect()
 }
 

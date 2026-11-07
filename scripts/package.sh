@@ -20,7 +20,7 @@ stage_dir="dist/hspice.nvim"
 rm -rf "$stage_dir"
 mkdir -p "$stage_dir/bin" "$stage_dir/parser"
 
-for item in plugin lsp lua ftplugin queries README.md; do
+for item in plugin lsp lua ftplugin queries README.md LICENSE; do
   cp -R "$item" "$stage_dir/"
 done
 cp "$binary" "$stage_dir/bin/"

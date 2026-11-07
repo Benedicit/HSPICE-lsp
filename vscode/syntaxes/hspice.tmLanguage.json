@@ -1,0 +1,14 @@
+{
+  "name": "HSPICE",
+  "scopeName": "source.hspice",
+  "patterns": [
+    { "name": "comment.line.asterisk.hspice", "match": "^\\s*\\*.*$" },
+    { "name": "comment.line.dollar.hspice", "match": "(?<=^|\\s)\\$.*$" },
+    { "name": "punctuation.separator.continuation.hspice", "match": "^\\s*\\+" },
+    { "name": "keyword.control.directive.hspice", "match": "^\\s*\\.[A-Za-z_]\\w*" },
+    {
+      "name": "constant.numeric.hspice",
+      "match": "(?<![\\w.])[-+]?(\\d+\\.?\\d*|\\.\\d+)([eE][-+]?\\d+)?[A-Za-z]*(?![\\w.])"
+    }
+  ]
+}

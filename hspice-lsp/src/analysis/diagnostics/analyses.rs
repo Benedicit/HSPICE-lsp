@@ -108,7 +108,7 @@ fn ac_problem(args: &[Arg]) -> Option<String> {
     })
 }
 
-/// `.dc` needs `var start stop step` (or `var DEC|OCT|LIN|POI np start stop`) unless `DATA=`/`MONTE=` is given.
+/// `.dc` needs `var start stop step` (or `var DEC|OCT|LIN np start stop`, `var POI np v1 …`) unless `DATA=`/`MONTE=` is given.
 ///
 /// # Arguments
 /// * `args` - command arguments
@@ -122,7 +122,7 @@ fn dc_problem(args: &[Arg]) -> Option<String> {
     };
     let rest = &values[1..];
     let needed = match rest.first().and_then(|value| word_key(value)) {
-        Some("dec" | "oct" | "lin" | "poi") => 4,
+        Some("dec" | "oct" | "lin") => 4,
         _ => 3,
     };
     (rest.len() < needed).then(|| "`.dc` needs `var start stop step`".to_string())

@@ -19,7 +19,7 @@ use lsp_server::{Connection, Message, Notification};
 use crate::config::Settings;
 use crate::features::{diagnostics::to_lsp_diagnostics, semantic_tokens};
 use crate::state::line_index::PositionEncoding;
-use crate::state::workspace::Workspace;
+use crate::state::workspace::{Workspace, file_path};
 
 /// Result type of the server entry points.
 pub type ServerResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
@@ -134,7 +134,7 @@ fn workspace_root(init: &InitializeParams) -> Option<PathBuf> {
         .map(|folder| folder.uri.clone());
     folder
         .or_else(|| init.root_uri.clone())
-        .and_then(|uri| uri.to_file_path().map(|path| path.into_owned()))
+        .and_then(|uri| file_path(&uri))
 }
 
 /// Returns the capabilities advertised to the client.

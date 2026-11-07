@@ -1,0 +1,38 @@
+# Attaches the Neovim and VS Code packages that CI built for the released commit to the GitHub release.
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  attach:
+    name: Attach CI packages
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - name: Find the CI run of the released commit
+        id: run
+        run: |
+          run_id=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --branch main --event push \
+            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [[ -z "$run_id" ]]; then
+            echo "No CI run on main for $GITHUB_SHA: release a commit that was pushed to main." >&2
+            exit 1
+          fi
+          echo "id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for the CI run
+        run: gh run watch "${{ steps.run.outputs.id }}" --exit-status --interval 30
+
+      - name: Attach the packages
+        run: |
+          gh run download "${{ steps.run.outputs.id }}" --dir packages
+          gh release upload "$TAG" packages/*/* --clobber

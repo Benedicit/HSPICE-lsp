@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use ls_types::CompletionItemKind;
 
 use super::candidate::{Candidate, escape_snippet};
-use crate::analysis::includes::resolve_include_path;
+use crate::analysis::includes::{read_source, resolve_include_path};
 use crate::analysis::symbols::{ScopeId, Symbol, SymbolDetail, SymbolKind};
 use crate::features::definition_text;
 use crate::lang::commands::COMMANDS;
@@ -660,8 +660,9 @@ fn base_directory(env: Env) -> Option<PathBuf> {
 /// # Returns
 /// Candidates and the number of bytes of the last path segment that the edit replaces.
 pub fn paths(env: Env, typed: &str) -> (Vec<Candidate>, usize) {
+    let separators: &[char] = if cfg!(windows) { &['/', '\\'] } else { &['/'] };
     let (directory_part, name_prefix) = typed
-        .rsplit_once('/')
+        .rsplit_once(separators)
         .map_or(("", typed), |(head, tail)| (head, tail));
     let base = if typed.starts_with('/') && directory_part.is_empty() {
         Some(PathBuf::from("/"))
@@ -721,8 +722,8 @@ pub fn lib_sections(env: Env, raw_path: &str) -> Vec<Candidate> {
     let Some(base) = base_directory(env) else {
         return Vec::new();
     };
-    let Some(text) = resolve_include_path(raw_path, &base, &search)
-        .and_then(|path| std::fs::read_to_string(path).ok())
+    let Some(text) =
+        resolve_include_path(raw_path, &base, &search).and_then(|path| read_source(&path).ok())
     else {
         return Vec::new();
     };

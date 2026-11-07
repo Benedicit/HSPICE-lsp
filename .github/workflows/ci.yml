@@ -1,5 +1,6 @@
-# Tests run on every push and pull request; release builds for Linux, macOS and Windows run in
-# parallel only after the tests pass on a push to main (which includes merged pull requests).
+# Tests run on every push and pull request; Neovim and VS Code packages for Linux, macOS and Windows
+# are built in parallel only after the tests pass on a push to main (which includes merged pull requests).
+# Publishing a GitHub release attaches these packages (see release.yml).
 name: CI
 
 on:
@@ -65,6 +66,19 @@ jobs:
           scripts/build-local.sh
           nvim --headless --clean -u NONE -l scripts/nvim-smoke.lua
 
+      - name: VS Code extension type check
+        working-directory: vscode
+        run: |
+          npm ci
+          npm run check
+
+      - name: VS Code smoke test
+        working-directory: vscode
+        run: |
+          mkdir -p server
+          cp ../bin/hspice-lsp server/
+          xvfb-run -a npm test
+
   build:
     name: Build (${{ matrix.name }})
     needs: test
@@ -76,16 +90,19 @@ jobs:
           - name: linux-x86_64
             os: ubuntu-latest
             target: x86_64-unknown-linux-musl
+            vscode: linux-x64
             binary: hspice-lsp
             parser: hspice.so
           - name: macos-arm64
             os: macos-latest
             target: aarch64-apple-darwin
+            vscode: darwin-arm64
             binary: hspice-lsp
             parser: hspice.so
           - name: windows-x86_64
             os: windows-latest
             target: x86_64-pc-windows-msvc
+            vscode: win32-x64
             binary: hspice-lsp.exe
             parser: hspice.dll
     runs-on: ${{ matrix.os }}
@@ -136,4 +153,13 @@ jobs:
         with:
           name: hspice.nvim-${{ matrix.name }}
           path: dist/hspice.nvim-${{ matrix.name }}.*
+          if-no-files-found: error
+
+      - name: Package VS Code extension
+        run: scripts/package-vscode.sh "${{ matrix.vscode }}" "target/${{ matrix.target }}/release/${{ matrix.binary }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hspice-vscode-${{ matrix.vscode }}
+          path: dist/hspice-vscode-${{ matrix.vscode }}.vsix
           if-no-files-found: error

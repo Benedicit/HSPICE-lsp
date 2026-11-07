@@ -28,12 +28,18 @@ pub struct NameKinds<'a> {
 
 /// Returns the positional (non-assignment) values of an element in order.
 ///
+/// A group right after the name holds nodes: `M1 (d g s b) nch`.
+///
 /// # Arguments
 /// * `element` - lowered element line
 pub fn positional_values(element: &Element) -> Vec<&Value> {
-    element
-        .args
+    let leading: &[Arg] = match element.args.first() {
+        Some(Arg::Group { args, .. }) => args,
+        _ => &[],
+    };
+    leading
         .iter()
+        .chain(&element.args)
         .filter_map(|arg| match arg {
             Arg::Value(value) => Some(value),
             _ => None,
@@ -475,6 +481,16 @@ mod tests {
 
     fn keys(idents: &[Ident]) -> Vec<&str> {
         idents.iter().map(|ident| ident.key.as_str()).collect()
+    }
+
+    #[test]
+    fn leading_group_holds_nodes() {
+        let mosfet = roles_of("M1 (d g s b) nch W=1u\n", &[]);
+        assert_eq!(keys(&mosfet.nodes), vec!["d", "g", "s", "b"]);
+        assert_eq!(mosfet.reference.map(|name| name.key), Some("nch".into()));
+        let instance = roles_of("X1 (a b) inv\n", &[]);
+        assert_eq!(keys(&instance.nodes), vec!["a", "b"]);
+        assert_eq!(instance.reference.map(|name| name.key), Some("inv".into()));
     }
 
     #[test]

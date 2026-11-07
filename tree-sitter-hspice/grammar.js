@@ -119,6 +119,7 @@ export default grammar({
     subckt_command: $ => seq(
       field('name', alias(dotKeyword('subckt', 'macro'), $.command_name)),
       field('subckt', $._word),
+      optional(seq('(', repeat(choice(field('port', choice($._word, $.number)), ',')), ')')),
       repeat(choice(field('port', choice($._word, $.number)), field('parameter', $.assignment), ',')),
     ),
 
@@ -210,8 +211,16 @@ export default grammar({
     assignment: $ => seq(
       field('key', choice($.word, $.call)),
       '=',
-      field('value', $._value_expression),
+      field('value', choice($._value_expression, $.value_list)),
     ),
+
+    // Two or more values: `listfreq=(1k 10k)`, `layer=(m1,0.5u)`, `monte=list(10 20:30)`.
+    value_list: $ => choice(
+      prec(PREC.call, seq(field('function', $.identifier), '(', $._list_item, repeat1($._list_item), ')')),
+      seq('(', $._list_item, repeat1(seq(optional(','), $._list_item)), ')'),
+    ),
+
+    _list_item: $ => choice($.number, $.identifier, $.quoted_expression, seq($.number, ':', $.number)),
 
     file_assignment: $ => seq(
       field('key', alias($.file_key, $.word)),
@@ -222,9 +231,12 @@ export default grammar({
     call: $ => prec(PREC.call, seq(
       field('function', $._word),
       '(',
-      repeat(field('argument', $._argument)),
+      repeat(field('argument', choice($._argument, alias($._wildcard, $.word)))),
       ')',
     )),
+
+    // `v(*)`, `i(*)`: a word may not start with `*` elsewhere (comment lines).
+    _wildcard: _ => /\*[^\s,=()'"\\]*/,
 
     parenthesized: $ => seq('(', repeat($._argument), ')'),
 
@@ -271,8 +283,9 @@ export default grammar({
       $.ternary_expression,
       $.call_expression,
       $.parenthesized_expression,
-      alias($._number_literal, $.number),
-      $.identifier,
+      // Beats a list item: `(a -1)` is a subtraction, not two values.
+      prec(1, alias($._number_literal, $.number)),
+      prec(1, $.identifier),
     ),
 
     binary_expression: $ => choice(

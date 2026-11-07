@@ -153,8 +153,13 @@ fn unused_params(syntax: &SyntaxInfo, analysis: &Analysis) -> Vec<Diagnostic> {
             )
         })
         .filter(|symbol| {
-            !used.contains(&(symbol.scope, symbol.name.key.clone()))
-                && !data_columns.contains(symbol.name.key.as_str())
+            let key = symbol.name.key.as_str();
+            !used.contains(&(symbol.scope, key.to_string()))
+                && !data_columns.contains(key)
+                && !analysis
+                    .external_words
+                    .iter()
+                    .any(|words| words.contains(key))
         })
         .map(|symbol| {
             let mut diagnostic = Diagnostic::new(

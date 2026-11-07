@@ -8,8 +8,9 @@ pub mod resolve;
 pub mod roles;
 pub mod symbols;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use blocks::{Structure, build_structure};
 use includes::IncludeDirective;
@@ -49,6 +50,8 @@ pub struct IncludeResolution {
 pub struct ExternalContext {
     /// Definitions visible through includes, libraries and including files.
     pub symbols: Vec<Symbol>,
+    /// Identifier words of those files.
+    pub words: Vec<Arc<HashSet<String>>>,
     /// One resolution per include directive of the document.
     pub includes: Vec<IncludeResolution>,
     /// False if some definitions may be missing (unresolved includes, include file without known includer).
@@ -72,6 +75,8 @@ pub struct Analysis {
     pub includes: Vec<IncludeResolution>,
     /// False if definitions from other files may be missing.
     pub context_complete: bool,
+    /// Identifier words of included files (parameters they may read).
+    pub external_words: Vec<Arc<HashSet<String>>>,
 }
 
 impl Default for Structure {
@@ -96,6 +101,7 @@ pub fn analyze(netlist: &Netlist, external: ExternalContext) -> Analysis {
         references: resolution.references,
         includes: external.includes,
         context_complete: external.complete,
+        external_words: external.words,
     }
 }
 

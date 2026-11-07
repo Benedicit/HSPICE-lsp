@@ -304,7 +304,13 @@ fn cleaned_prefix(text: &str, start: usize, cursor: usize) -> Option<String> {
     let lines: Vec<&str> = text[start..cursor].split('\n').collect();
     let cleaned: Vec<(String, bool)> = lines
         .iter()
-        .map(|line| clean_line(line.trim_end_matches('\r')))
+        .map(|line| match line.strip_suffix('\r') {
+            Some(content) => {
+                let (cleaned, commented) = clean_line(content);
+                (cleaned + " ", commented)
+            }
+            None => clean_line(line),
+        })
         .collect();
     let last_commented = cleaned.last().is_some_and(|(_, commented)| *commented);
     let comment_line_start = lines.last().is_some_and(|line| is_comment_line(line));
@@ -576,6 +582,15 @@ mod tests {
         assert_eq!(quoted.frames[1].kind, FrameKind::Quote('\''));
         assert_eq!(quoted.frames.len(), 3);
         assert_eq!(quoted.innermost().argument_index(), 1);
+    }
+
+    #[test]
+    fn crlf_keeps_offsets_aligned() {
+        let text = "* t\r\nM1 d g\r\n+ s b n";
+        let result = scan(text, text.len()).expect("scan");
+        assert_eq!(result.text.len(), text.len() - result.line_start);
+        assert_eq!(result.current_word(), "n");
+        assert_eq!(result.positionals().len(), 4);
     }
 
     #[test]

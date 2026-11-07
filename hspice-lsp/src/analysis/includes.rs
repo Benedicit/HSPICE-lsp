@@ -1,6 +1,7 @@
 //! Include directives, include-path resolution and definition summaries of included files.
 
-use std::path::{Path, PathBuf};
+use std::collections::HashSet;
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
 use super::blocks::build_structure;
@@ -49,6 +50,8 @@ pub struct FileSummary {
     pub symbols: Vec<Symbol>,
     /// Include directives in source order.
     pub includes: Vec<IncludeDirective>,
+    /// Lowercase identifier words of the whole file (tells which parameters it reads).
+    pub words: Arc<HashSet<String>>,
 }
 
 impl FileSummary {
@@ -144,11 +147,26 @@ pub fn summarize(path: &Path, text: String) -> FileSummary {
         .map(without_body_scope)
         .collect();
     let includes = include_directives(&netlist, &structure.statement_section);
+    let words = Arc::new(identifier_words(&file.text));
     FileSummary {
         file,
         symbols,
         includes,
+        words,
     }
+}
+
+/// Returns the lowercase identifier-like words of a text.
+///
+/// # Arguments
+/// * `text` - file contents
+fn identifier_words(text: &str) -> HashSet<String> {
+    text.split(|character: char| {
+        !(character.is_ascii_alphanumeric() || matches!(character, '_' | '.' | '#'))
+    })
+    .filter(|word| word.starts_with(|first: char| first.is_ascii_alphabetic() || first == '_'))
+    .map(str::to_ascii_lowercase)
+    .collect()
 }
 
 /// Drops the body scope of external subckts, since scope ids are only meaningful inside their own file.
@@ -258,9 +276,9 @@ fn model_header_ranges(start: usize, line: &str) -> Vec<TextRange> {
 /// * `env` - environment lookup (`std::env::var` in production)
 pub fn expand_path(raw: &str, env: &dyn Fn(&str) -> Option<String>) -> String {
     let with_home = match raw.strip_prefix('~') {
-        Some(rest) if rest.is_empty() || rest.starts_with('/') => {
-            env("HOME").map_or_else(|| raw.to_string(), |home| format!("{home}{rest}"))
-        }
+        Some(rest) if rest.is_empty() || rest.starts_with(['/', '\\']) => env("HOME")
+            .or_else(|| env("USERPROFILE"))
+            .map_or_else(|| raw.to_string(), |home| format!("{home}{rest}")),
         _ => raw.to_string(),
     };
     expand_variables(&with_home, env)
@@ -309,12 +327,48 @@ pub fn resolve_include_path(
 ) -> Option<PathBuf> {
     let expanded = PathBuf::from(expand_path(raw, &|name| std::env::var(name).ok()));
     if expanded.is_absolute() {
-        return expanded.is_file().then_some(expanded);
+        let path = normalize(&expanded);
+        return path.is_file().then_some(path);
     }
     std::iter::once(base_dir)
         .chain(search_dirs.iter().map(PathBuf::as_path))
-        .map(|directory| directory.join(&expanded))
+        .map(|directory| normalize(&directory.join(&expanded)))
         .find(|candidate| candidate.is_file())
+}
+
+/// Removes `.` and folds `..` components without touching the file system.
+///
+/// # Arguments
+/// * `path` - path to normalise
+fn normalize(path: &Path) -> PathBuf {
+    path.components()
+        .fold(PathBuf::new(), |mut normalized, component| {
+            match component {
+                Component::CurDir => {}
+                Component::ParentDir
+                    if matches!(
+                        normalized.components().next_back(),
+                        Some(Component::Normal(_))
+                    ) =>
+                {
+                    normalized.pop();
+                }
+                _ => normalized.push(component),
+            }
+            normalized
+        })
+}
+
+/// Reads a netlist from disk, replacing invalid UTF-8 and dropping a leading byte-order mark.
+///
+/// # Arguments
+/// * `path` - file path
+pub fn read_source(path: &Path) -> std::io::Result<String> {
+    let text = String::from_utf8_lossy(&std::fs::read(path)?).into_owned();
+    Ok(match text.strip_prefix('\u{feff}') {
+        Some(rest) => rest.to_string(),
+        None => text,
+    })
 }
 
 #[cfg(test)]
@@ -336,6 +390,35 @@ mod tests {
         assert_eq!(expand_path("${PDK}/x/${PDK}", &env), "/eda/pdk/x//eda/pdk");
         assert_eq!(expand_path("~/lib.sp", &env), "/home/me/lib.sp");
         assert_eq!(expand_path("$UNKNOWN/a", &env), "$UNKNOWN/a");
+        let windows = |name: &str| (name == "USERPROFILE").then(|| "C:\\Users\\me".to_string());
+        assert_eq!(expand_path("~\\lib.sp", &windows), "C:\\Users\\me\\lib.sp");
+    }
+
+    #[test]
+    fn normalizes_parent_components() {
+        assert_eq!(
+            normalize(Path::new("/p/tb/../cells/./inv.inc")),
+            PathBuf::from("/p/cells/inv.inc")
+        );
+        assert_eq!(normalize(Path::new("../a/../b")), PathBuf::from("../b"));
+    }
+
+    #[test]
+    fn read_source_drops_byte_order_mark() {
+        let path = std::env::temp_dir().join("hspice-lsp-bom-test.inc");
+        std::fs::write(&path, "\u{feff}.subckt a b\n").unwrap_or_default();
+        assert_eq!(read_source(&path).ok().as_deref(), Some(".subckt a b\n"));
+        std::fs::remove_file(&path).unwrap_or_default();
+    }
+
+    #[test]
+    fn summary_words_are_lowercase_identifiers() {
+        let summary = summarize(
+            Path::new("/tmp/t.lib"),
+            "* c\n.model n nmos vth0='0.4+Dvth'\n".to_string(),
+        );
+        assert!(summary.words.contains("dvth"));
+        assert!(!summary.words.contains("0.4"));
     }
 
     #[test]

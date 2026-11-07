@@ -228,6 +228,7 @@ pub fn handle_notification(workspace: &mut Workspace, notification: Notification
             })
             .unwrap_or_default(),
         DidChangeConfiguration::METHOD => parse::<DidChangeConfiguration>(notification)
+            .filter(|params| !params.settings.is_null())
             .map(|params| workspace.set_settings(Settings::from_json(&params.settings)))
             .unwrap_or_default(),
         _ => Vec::new(),
@@ -246,4 +247,34 @@ where
     serde_json::from_value(notification.params)
         .map_err(|error| eprintln!("hspice-lsp: invalid {} params: {error}", N::METHOD))
         .ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::line_index::PositionEncoding;
+
+    fn configure(workspace: &mut Workspace, settings: serde_json::Value) {
+        let notification = Notification::new(
+            DidChangeConfiguration::METHOD.to_string(),
+            serde_json::json!({ "settings": settings }),
+        );
+        handle_notification(workspace, notification);
+    }
+
+    #[test]
+    fn null_configuration_keeps_settings() {
+        let settings = Settings {
+            include_paths: vec!["/pdk".to_string()],
+            ..Settings::default()
+        };
+        let mut workspace = Workspace::new(None, PositionEncoding::Utf16, settings.clone());
+        configure(&mut workspace, serde_json::Value::Null);
+        assert_eq!(workspace.settings, settings);
+        configure(
+            &mut workspace,
+            serde_json::json!({ "hspice": { "includePaths": [] } }),
+        );
+        assert!(workspace.settings.include_paths.is_empty());
+    }
 }

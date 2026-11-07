@@ -9,7 +9,7 @@ use ls_types::Uri;
 
 use crate::analysis::diagnostics::compute;
 use crate::analysis::includes::{
-    FileSummary, IncludeDirective, IncludeKind, expand_path, include_directives,
+    FileSummary, IncludeDirective, IncludeKind, expand_path, include_directives, read_source,
     resolve_include_path, summarize,
 };
 use crate::analysis::symbols::Symbol;
@@ -52,6 +52,7 @@ struct CacheEntry {
 #[derive(Debug, Default)]
 struct Closure {
     symbols: Vec<Symbol>,
+    words: Vec<Arc<HashSet<String>>>,
     visited: HashSet<(PathBuf, Option<String>)>,
     complete: bool,
 }
@@ -115,7 +116,7 @@ impl Workspace {
     /// # Returns
     /// URIs whose diagnostics changed.
     pub fn update(&mut self, uri: Uri, version: i32, text: String) -> Vec<Uri> {
-        let path = uri.to_file_path().map(|path| path.into_owned());
+        let path = file_path(&uri);
         if self.document(&uri).is_none() {
             self.includer_index = None;
         }
@@ -156,7 +157,7 @@ impl Workspace {
     /// URIs whose diagnostics changed.
     pub fn saved(&mut self, uri: &Uri) -> Vec<Uri> {
         self.includer_index = None;
-        let path = uri.to_file_path().map(|path| path.into_owned());
+        let path = file_path(uri);
         if let Some(path) = &path {
             self.cache.remove(path);
         }
@@ -336,6 +337,7 @@ impl Workspace {
             .collect();
         let context = ExternalContext {
             symbols: closure.symbols,
+            words: closure.words,
             includes,
             complete: closure.complete,
         };
@@ -367,11 +369,28 @@ impl Workspace {
                 error: Some(IncludeError::NotFound),
             };
         };
+        let section = directive
+            .section
+            .as_ref()
+            .map(|section| section.key.clone());
         if own_path.is_some_and(|own| same_file(own, &resolved)) {
+            // A library may call its other sections; their definitions are already local.
+            let error = match &section {
+                Some(name)
+                    if directive.kind == IncludeKind::Lib
+                        && section != directive.enclosing_section =>
+                {
+                    let found = self
+                        .summary(&resolved)
+                        .is_ok_and(|own| own.has_section(name));
+                    (!found).then_some(IncludeError::SectionNotFound)
+                }
+                _ => Some(IncludeError::Cycle),
+            };
             return IncludeResolution {
                 directive,
                 resolved: Some(resolved),
-                error: Some(IncludeError::Cycle),
+                error,
             };
         }
         let summary = match self.summary(&resolved) {
@@ -385,10 +404,6 @@ impl Workspace {
                 };
             }
         };
-        let section = directive
-            .section
-            .as_ref()
-            .map(|section| section.key.clone());
         if directive.kind == IncludeKind::Lib
             && section
                 .as_deref()
@@ -433,6 +448,7 @@ impl Workspace {
             return;
         }
         closure.symbols.extend(summary.symbols_in(section).cloned());
+        closure.words.push(Arc::clone(&summary.words));
         let base_dir = summary
             .file
             .path
@@ -605,10 +621,7 @@ impl Workspace {
         }
         let text = match text {
             Some(text) => text,
-            None => {
-                let bytes = std::fs::read(path).map_err(|_| IncludeError::NotFound)?;
-                String::from_utf8_lossy(&bytes).into_owned()
-            }
+            None => read_source(path).map_err(|_| IncludeError::NotFound)?,
         };
         let summary = Arc::new(summarize(path, text));
         self.cache.insert(
@@ -685,6 +698,18 @@ fn option_search_dirs(netlist: &Netlist) -> Vec<String> {
         .collect()
 }
 
+/// Returns the file path of a `file:` URI; other schemes (`untitled:`, `git:`, …) have none.
+///
+/// # Arguments
+/// * `uri` - document URI
+pub fn file_path(uri: &Uri) -> Option<PathBuf> {
+    uri.scheme()
+        .as_str()
+        .eq_ignore_ascii_case("file")
+        .then(|| uri.to_file_path().map(|path| path.into_owned()))
+        .flatten()
+}
+
 /// Returns the canonical form of a path, or the path itself if it cannot be canonicalised.
 ///
 /// # Arguments
@@ -747,6 +772,8 @@ fn is_netlist_file(path: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
 
     fn fixture(relative: &str) -> PathBuf {
@@ -814,6 +841,79 @@ mod tests {
                 .into_iter()
                 .all(|reference| reference.target.is_some())
         );
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("hspice-lsp-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("cells")).expect("scratch dir");
+        dir
+    }
+
+    fn open_file(workspace: &mut Workspace, path: &Path, text: &str) -> (Uri, Vec<Uri>) {
+        std::fs::write(path, text).expect("write");
+        let uri = Uri::from_file_path(path).expect("file uri");
+        let changed = workspace.update(uri.clone(), 1, text.to_string());
+        (uri, changed)
+    }
+
+    #[test]
+    fn library_may_call_its_other_sections() {
+        let dir = scratch("sections");
+        let mut workspace = Workspace::new(None, PositionEncoding::Utf16, Settings::default());
+        let text = "* corners\n.lib tt\n.lib 'corners.lib' mos\n.endl tt\n.lib mos\n.model nch nmos\n.lib 'corners.lib' mos\n.lib 'corners.lib' xx\n.endl mos\n";
+        let (uri, _) = open_file(&mut workspace, &dir.join("corners.lib"), text);
+        let errors: Vec<Option<IncludeError>> = workspace
+            .document(&uri)
+            .expect("document")
+            .analysis
+            .includes
+            .iter()
+            .map(|include| include.error)
+            .collect();
+        assert_eq!(
+            errors,
+            vec![
+                None,
+                Some(IncludeError::Cycle),
+                Some(IncludeError::SectionNotFound)
+            ]
+        );
+        std::fs::remove_dir_all(dir).unwrap_or_default();
+    }
+
+    #[test]
+    fn parent_relative_includes_refresh_their_includers() {
+        let dir = scratch("parent");
+        std::fs::create_dir_all(dir.join("tb")).expect("tb dir");
+        let mut workspace = Workspace::new(None, PositionEncoding::Utf16, Settings::default());
+        let cell = dir.join("cells/cell.inc");
+        open_file(&mut workspace, &cell, ".subckt cell a b\nR1 a b 1\n.ends\n");
+        let (top, _) = open_file(
+            &mut workspace,
+            &dir.join("tb/top.sp"),
+            "* top\n.include '../cells/cell.inc'\nX1 a 0 cell\nV1 a 0 1\n.end\n",
+        );
+        let resolved = workspace.document(&top).expect("top").analysis.includes[0]
+            .resolved
+            .clone();
+        assert_eq!(resolved, Some(cell.clone()));
+        let (_, changed) = open_file(
+            &mut workspace,
+            &cell,
+            ".subckt cell2 a b\nR1 a b 1\n.ends\n",
+        );
+        assert!(changed.contains(&top));
+        std::fs::remove_dir_all(dir).unwrap_or_default();
+    }
+
+    #[test]
+    fn only_file_uris_have_paths() {
+        let mut workspace = Workspace::new(None, PositionEncoding::Utf16, Settings::default());
+        let uri = Uri::from_str("untitled:Untitled-1").expect("uri");
+        workspace.update(uri.clone(), 1, "* t\nR1 a 0 1\n".to_string());
+        assert!(workspace.document(&uri).expect("document").path.is_none());
+        let file = Uri::from_str("file:///tmp/a.sp").expect("uri");
+        assert!(file_path(&file).is_some());
     }
 
     #[test]

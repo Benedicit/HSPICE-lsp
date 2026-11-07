@@ -6,3 +6,8 @@
 *.dylib
 .DS_Store
 .cc-writes/
+/vscode/node_modules/
+/vscode/out/
+/vscode/server/
+/vscode/.vscode-test/
+/vscode/LICENSE

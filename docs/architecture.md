@@ -11,6 +11,9 @@ change re-parses and re-analyses the document (milliseconds for netlists) and re
 documents that depend on it. Everything below `server/` is safe, synchronous and side-effect free
 except `state/workspace.rs` (file reads for includes, workspace scan).
 
+Clients: the Neovim plugin (`lsp/hspice.lua`) and the VS Code extension (`vscode/src/extension.ts`)
+start the same binary over stdio. Only `file:` URIs have a path (`state::workspace::file_path`).
+
 ## Crates and modules (`hspice-lsp/src`)
 | Module | Purpose |
 |---|---|
@@ -45,7 +48,8 @@ except `state/workspace.rs` (file reads for includes, workspace scan).
   references have `RefContext::Terminal { element, terminal }` where `element` indexes
   `Analysis::elements`.
 - External symbols (from includes / `.lib` sections / including netlists) come after local ones
-  and have `Origin::External`; their `name.range` refers to *their* file.
+  and have `Origin::External`; their `name.range` refers to *their* file. Include paths are
+  normalised lexically (no `..`); disk reads go through `includes::read_source` (BOM stripped).
 - `Analysis::context_complete == false` means some definitions may be missing (unresolved include,
   include file without a known includer): report "undefined …" more leniently.
 - `Structure::skipped[i]` statements (variation blocks, encrypted `.prot` regions, unparsable lines)

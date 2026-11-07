@@ -1,6 +1,6 @@
 # hspice.nvim
 
-A language server and Neovim plugin for HSPICE netlists. The server (`hspice-lsp`) is written in Rust on top of a tree-sitter grammar. The plugin wires it into Neovim's native LSP client.
+A language server for HSPICE netlists, with a Neovim plugin and a VS Code extension. The server (`hspice-lsp`) is written in Rust on top of a tree-sitter grammar. The Neovim plugin wires it into Neovim's native LSP client; the VS Code extension bundles it.
 
 ## Disclaimer
 
@@ -25,17 +25,27 @@ Everything is based solely upon publicly available manuals/reference sheets onli
 - **Hover**: command synopses, element terminal mapping, parameter values (evaluated), subckt and model cards, node connections, number values (`10M` = 1e-2).
 - **Navigation**: go to definition (including into `.include`/`.lib` files and all model bins), find references, document highlight, rename.
 - **Structure**: document and workspace symbols, folding ranges.
-- **Highlighting**: semantic tokens on top of tree-sitter highlighting.
+- **Highlighting**: semantic tokens on top of tree-sitter (Neovim) or a basic TextMate grammar (VS Code).
 - **Editing help**: signature help, inlay hints (subckt port and terminal names, source-function arguments), quick fixes (`MEG`, add `.param`, insert closers and `.end`, "did you mean …").
 
 The grammar and the semantics follow the HSPICE manuals; see `docs/hspice-reference.md`. `docs/architecture.md` describes the server internals.
 
 ## Requirements
 
-- Neovim 0.11 or newer (developed against 0.12)
-- Prebuilt packages from CI (Linux x86_64, macOS arm64, Windows x86_64), or a Rust toolchain plus a C compiler for local builds
+- Neovim 0.11 or newer (developed against 0.12), or VS Code 1.91 or newer
+- Prebuilt packages (Linux x86_64, macOS arm64, Windows x86_64), or a Rust toolchain plus a C compiler for local builds
 
 ## Installation
+
+### Prebuilt packages
+
+Every push to `main` runs the CI pipeline (`.github/workflows/ci.yml`). It builds the Neovim plugin (`hspice.nvim-<platform>`) and the VS Code extension (`hspice-vscode-<target>`) for Linux, macOS and Windows. Publishing a GitHub release attaches these files to the release. Download them from the release page or from the workflow run (`gh run download -n hspice.nvim-linux-x86_64`).
+
+For Neovim, unpack the archive anywhere and point lazy.nvim at the extracted `hspice.nvim` folder:
+
+```lua
+{ dir = "/path/to/hspice.nvim", lazy = false, opts = {} }
+```
 
 ### Local build (macOS or Linux with Rust)
 
@@ -43,21 +53,38 @@ The grammar and the semantics follow the HSPICE manuals; see `docs/hspice-refere
 scripts/build-local.sh
 ```
 
-This builds `bin/hspice-lsp` and `parser/hspice.so`. If `tree-sitter-hspice/grammar.js` is newer than `src/parser.c`, the parser is regenerated first, which needs the `tree-sitter` CLI.
+This builds `bin/hspice-lsp` and `parser/hspice.so`. If `tree-sitter-hspice/grammar.js` is newer than `src/parser.c`, the parser is regenerated first, which needs the `tree-sitter` CLI. Then use the checkout as the plugin directory: `{ dir = "/path/to/HSPICE_lsp", lazy = false, opts = {} }`.
 
-lazy.nvim spec:
+### Windows
+
+Neovim: extract `hspice.nvim-windows-x86_64.zip`, e.g. to `%LOCALAPPDATA%\nvim-data\hspice.nvim`, and use forward slashes in the lazy.nvim spec:
 
 ```lua
-{ dir = "/path/to/HSPICE_lsp", lazy = false, opts = {} }
+{ dir = "C:/Users/<you>/AppData/Local/nvim-data/hspice.nvim", lazy = false, opts = {} }
 ```
 
-### Prebuilt packages
+VS Code: install `hspice-vscode-win32-x64.vsix` (see below).
 
-Every push to `main` runs the CI pipeline (`.github/workflows/ci.yml`). It builds the plugin for Linux, macOS and Windows and uploads `hspice.nvim-<platform>` artifacts. Download one from the workflow run page (or with `gh run download -n hspice.nvim-linux-x86_64`), then copy and unpack it
+To build locally, install the Rust MSVC toolchain, the Visual Studio C++ Build Tools and the tree-sitter CLI (`npm install -g tree-sitter-cli@0.27.1`), then run in PowerShell from the checkout:
+
+```powershell
+cargo build --release -p hspice-lsp
+New-Item -ItemType Directory -Force bin, parser | Out-Null
+Copy-Item target\release\hspice-lsp.exe bin\
+tree-sitter build --output parser\hspice.dll tree-sitter-hspice
+```
+
+Include paths may use `\` or `/`. A leading `~` expands to `%USERPROFILE%` when `HOME` is not set.
+
+### VS Code
+
+Install the package for your platform (`hspice-vscode-linux-x64.vsix`, `-darwin-arm64` or `-win32-x64`) with **Extensions: Install from VSIX…** or `code --install-extension hspice-vscode-<target>.vsix`. It bundles the server.
+
+To package it yourself (Node.js 22+, Git Bash on Windows), build the server and run e.g. `scripts/package-vscode.sh darwin-arm64 bin/hspice-lsp`. The `.vsix` ends up in `dist/`.
 
 ## Configuration
 
-`opts` is passed to `require("hspice").setup(opts)`:
+Neovim: `opts` is passed to `require("hspice").setup(opts)`:
 
 ```lua
 opts = {
@@ -74,6 +101,8 @@ opts = {
 }
 ```
 
+VS Code: the same settings live under `hspice.` (e.g. `"hspice.includePaths": ["/eda/pdk"]`). In addition, `hspice.server.path` replaces the bundled server and `hspice.trace.server` logs the LSP traffic.
+
 Settings are sent as `initializationOptions` and as `settings.hspice` in `workspace/didChangeConfiguration`.
 
 | Setting | Default | Meaning |
@@ -89,26 +118,31 @@ Settings are sent as `initializationOptions` and as `settings.hspice` in `worksp
 | `workspaceScan.maxFiles` | `500` | Maximum number of files scanned |
 | `maxIncludeFileSizeMb` | `64` | Skip included files larger than this |
 
-The plugin creates no keymaps. Use your own `LspAttach` mappings.
+The Neovim plugin creates no keymaps. Use your own `LspAttach` mappings.
 
 ## File types
 
 Neovim already maps `.sp` and `.spice` to the filetype `spice`. The plugin also detects `.inc` and `.pm` files as `spice` when one of the first 100 lines starts with a known HSPICE dot command (`.subckt`, `.model`, `.param`, `.include`, `.lib`, …). Otherwise Neovim's built-in detection applies, so Perl modules and C/Pascal include files keep their filetypes. The tree-sitter parser `hspice` is registered for the `spice` filetype.
+
+VS Code opens `.sp` and `.spice` as HSPICE and applies the same `.inc`/`.pm` check once per file, so choosing another language mode afterwards sticks.
 
 ## Troubleshooting
 
 - `:checkhealth hspice` checks the binary, parser, queries and filetype registration.
 - `:checkhealth vim.lsp` (or `:LspInfo`) shows active clients and their configuration.
 - `:LspLog` opens the client log.
-- If the binary is missing, rerun `scripts/build-local.sh` or reinstall the tarball.
+- If the binary is missing, rerun `scripts/build-local.sh` or reinstall the package.
+- VS Code: the **HSPICE** output channel shows the server log, and **HSPICE: Restart Language Server** restarts the server.
 
 ## Architecture
 
 - `tree-sitter-hspice/`: tree-sitter grammar for HSPICE.
 - `hspice-lsp/`: the Rust language server. It uses `#![forbid(unsafe_code)]`. The only `unsafe` in the workspace is the two-line generated FFI declaration in `tree-sitter-hspice/bindings/rust/lib.rs`, which tree-sitter requires.
 - `plugin/`, `lsp/`, `lua/`, `ftplugin/`, `queries/`: the Neovim plugin (filetype detection, native LSP config, health check, highlight queries).
-- `scripts/`: local build, packaging (used by CI) and the headless smoke test.
-- `.github/workflows/ci.yml`: the CI pipeline. Every push and pull request runs the tests: generated-parser check, grammar corpus, rustfmt, clippy, unit and end-to-end tests, and the Neovim smoke test. Pushes to `main` additionally build Linux, macOS and Windows packages in parallel.
+- `vscode/`: the VS Code extension (language client, `.inc`/`.pm` detection, TextMate grammar, smoke test).
+- `scripts/`: local build, packaging (used by CI) and the headless Neovim smoke test.
+- `.github/workflows/ci.yml`: the CI pipeline. Every push and pull request runs the tests: generated-parser check, grammar corpus, rustfmt, clippy, unit and end-to-end tests, and the Neovim and VS Code smoke tests. Pushes to `main` additionally build the Linux, macOS and Windows packages in parallel.
+- `.github/workflows/release.yml`: publishing a GitHub release attaches the packages from the CI run of the released commit. That commit must have been pushed to `main`, and CI artifacts expire after 90 days.
 
 ## Development
 
@@ -117,6 +151,13 @@ cargo test
 (cd tree-sitter-hspice && tree-sitter test)
 XDG_STATE_HOME=$TMPDIR XDG_DATA_HOME=$TMPDIR XDG_CACHE_HOME=$TMPDIR \
   nvim --headless --clean -u NONE -l scripts/nvim-smoke.lua
+(cd vscode && npm ci && npm run check && mkdir -p server && cp ../bin/hspice-lsp server/ && npm test)
 ```
 
-The smoke test needs `bin/hspice-lsp` and `parser/hspice.so` from `scripts/build-local.sh`. It starts the server on `hspice-lsp/tests/fixtures/inverter_tb.sp` and checks attach, diagnostics, completion, hover and go-to-definition. Pass another fixture path as an argument to override the default.
+The Neovim smoke test needs `bin/hspice-lsp` and `parser/hspice.so` from `scripts/build-local.sh`. It starts the server on `hspice-lsp/tests/fixtures/inverter_tb.sp` and checks attach, diagnostics, completion, hover and go-to-definition. Pass another fixture path as an argument to override the default.
+
+The VS Code smoke test (`vscode/test/`) downloads VS Code, or uses the one in `VSCODE_EXECUTABLE`, and checks the same features plus `.inc`/`.pm` detection.
+
+## License
+
+MIT, see `LICENSE`. HSPICE is a trademark of Synopsys, Inc. This project is not affiliated with Synopsys.

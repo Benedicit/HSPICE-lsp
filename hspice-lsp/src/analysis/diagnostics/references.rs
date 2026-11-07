@@ -257,9 +257,9 @@ fn unknown_instance_params(syntax: &SyntaxInfo, analysis: &Analysis) -> Vec<Diag
         .filter(|(info, _)| !info.skipped)
         .flat_map(|(info, symbol)| {
             let element = elements
-                .iter()
-                .find(|(index, _)| *index == info.statement)
-                .map(|(_, element)| *element);
+                .binary_search_by_key(&info.statement, |(index, _)| *index)
+                .ok()
+                .map(|position| elements[position].1);
             element.into_iter().flat_map(move |element| {
                 assignments(element).filter_map(move |assignment| {
                     let AssignKey::Name(key) = &assignment.key else {

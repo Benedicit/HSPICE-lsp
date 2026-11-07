@@ -89,6 +89,8 @@ pub const CALL_EXPRESSION: &str = "call_expression";
 pub const PARENTHESIZED_EXPRESSION: &str = "parenthesized_expression";
 /// Expression identifier.
 pub const IDENTIFIER: &str = "identifier";
+/// `key=(v1 v2 …)` or `key=list(…)` value.
+pub const VALUE_LIST: &str = "value_list";
 /// Free text of `.title` / `.alter`.
 pub const TEXT: &str = "text";
 
@@ -188,6 +190,7 @@ mod tests {
             CALL_EXPRESSION,
             PARENTHESIZED_EXPRESSION,
             IDENTIFIER,
+            VALUE_LIST,
             TEXT,
         ];
         let missing: Vec<&str> = kinds

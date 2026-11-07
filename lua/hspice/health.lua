@@ -18,7 +18,7 @@ local function check_binary()
   if executable == "" then
     vim.health.error(
       ("Server binary not found: %s"):format(cmd[1]),
-      { "Run scripts/build-local.sh, or install the Linux tarball (see README)" }
+      { "Run scripts/build-local.sh, or install a prebuilt package (see README)" }
     )
     return
   end
@@ -39,7 +39,7 @@ local function check_parser()
   if ok and err ~= false then
     vim.health.ok("tree-sitter parser `hspice` loaded")
   else
-    vim.health.error("tree-sitter parser `hspice` not loadable", { "Expected parser/hspice.so in the plugin", tostring(err) })
+    vim.health.error("tree-sitter parser `hspice` not loadable", { "Expected parser/hspice.so (hspice.dll on Windows) in the plugin", tostring(err) })
   end
 end
 

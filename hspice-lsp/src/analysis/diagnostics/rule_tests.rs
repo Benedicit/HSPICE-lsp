@@ -342,6 +342,8 @@ fn analysis_argument_rules() {
         &format!("{BASE}.dc V1 dec 10 1 100\n"),
         "analysis-args"
     ));
+    assert!(!has(&format!("{BASE}.dc temp poi 1 25\n"), "analysis-args"));
+    assert!(has(&format!("{BASE}.dc V1 dec 10 1\n"), "analysis-args"));
     assert!(has(&format!("{BASE}.noise v(a)\n"), "analysis-args"));
     assert!(has(&format!("{BASE}.tf v(a)\n"), "analysis-args"));
     assert!(!has(&format!("{BASE}.tf v(a) V1\n"), "analysis-args"));
@@ -386,6 +388,41 @@ fn parameter_rules() {
         ..Default::default()
     };
     assert!(run_with(&format!("{BASE}.param unused=1\n"), true, true, &off).is_empty());
+}
+
+#[test]
+fn params_read_by_included_files_are_used() {
+    let text = format!("{BASE}.param vth_shift=0.1 other=1\n");
+    let syntax = parse_document(&text, true);
+    let words = std::collections::HashSet::from(["vth_shift".to_string()]);
+    let analysis = analyze(
+        &syntax.netlist,
+        ExternalContext {
+            complete: true,
+            words: vec![std::sync::Arc::new(words)],
+            ..Default::default()
+        },
+    );
+    let unused: Vec<String> = compute(&syntax, &analysis, &DiagnosticSettings::default(), &text)
+        .into_iter()
+        .filter(|d| d.code == "unused-param")
+        .map(|d| d.message)
+        .collect();
+    assert_eq!(unused, vec!["Parameter `other` is never used".to_string()]);
+}
+
+#[test]
+fn fft_keyword_values_are_not_params() {
+    assert_eq!(
+        run(&format!(
+            "{BASE}.tran 1n 10n\n.fft v(a) window=hann format=norm np=1024\n.end\n"
+        )),
+        vec![]
+    );
+    assert!(has(
+        &format!("{BASE}.tran 1n 10n\n.fft v(a) np=npts\n"),
+        "undefined-param"
+    ));
 }
 
 #[test]
@@ -519,4 +556,18 @@ fn floating_nodes_are_not_reported_where_includes_may_connect_them() {
     assert!(!has(&pex, "floating-node"));
     let plain = format!("{BASE}.subckt inv a b\nR2 a lone 1k\nR3 a b 1k\n.ends\n");
     assert!(has(&plain, "floating-node"));
+}
+
+#[test]
+fn parenthesised_nodes_are_nodes() {
+    let text = "t\n.model nch nmos level=1\n.subckt inv a y\nM1 (y a 0 0) nch\n.ends\nV1 a 0 1\nX1 (a y) inv\nR1 (y 0) 1k\n.op\n.end\n";
+    assert_eq!(run(text), vec![]);
+}
+
+#[test]
+fn value_lists_and_wildcards_are_valid() {
+    let text = format!(
+        "{BASE}.ac dec 10 1 1meg\n.noise v(a) V1 10 listfreq=(1k 10k)\n.tran 1n 10n sweep monte=list(10 20:30)\n.probe tran v(*) i(*)\n.end\n"
+    );
+    assert_eq!(run(&text), vec![]);
 }

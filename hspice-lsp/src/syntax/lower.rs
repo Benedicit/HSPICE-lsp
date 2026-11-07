@@ -362,15 +362,34 @@ fn lower_assignment(node: Node, text: &str) -> Option<Assignment> {
     } else {
         AssignKey::Name(ident_of(key_node, text))
     };
-    let value = node
+    let mut values = node
         .child_by_field_name(kinds::FIELD_VALUE)
-        .map(|value| Value::Expr(lower_expr(value, text)));
+        .map(list_items)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|item| Value::Expr(lower_expr(item, text)));
     Some(Assignment {
         key,
-        value,
-        extra_values: Vec::new(),
+        value: values.next(),
+        extra_values: values.collect(),
         range: range_of(node),
     })
+}
+
+/// Returns the items of a `value_list` (without its function name), or the node itself.
+///
+/// # Arguments
+/// * `value` - assignment value node
+fn list_items(value: Node) -> Vec<Node> {
+    if value.kind() != kinds::VALUE_LIST {
+        return vec![value];
+    }
+    let function = value.child_by_field_name(kinds::FIELD_FUNCTION);
+    let mut cursor = value.walk();
+    value
+        .named_children(&mut cursor)
+        .filter(|child| !child.is_extra() && Some(*child) != function)
+        .collect()
 }
 
 /// Lowers a positional value node.
@@ -545,6 +564,23 @@ mod tests {
         let netlist = lower_text(text);
         assert_eq!(netlist.statements.len(), 1, "{netlist:#?}");
         netlist.statements[0].kind.clone()
+    }
+
+    #[test]
+    fn value_lists_become_extra_values() {
+        let StatementKind::Command(command) =
+            only_statement(".tran 1n 1u sweep monte=list(10 20:30)\n")
+        else {
+            panic!("expected command");
+        };
+        let CommandKind::Generic { args } = &command.kind else {
+            panic!("expected generic command");
+        };
+        let Some(Arg::Assign(monte)) = args.last() else {
+            panic!("expected assignment");
+        };
+        assert!(monte.value.is_some());
+        assert_eq!(monte.extra_values.len(), 2);
     }
 
     #[test]

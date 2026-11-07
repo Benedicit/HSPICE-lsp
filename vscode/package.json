@@ -1,0 +1,150 @@
+{
+  "name": "hspice",
+  "displayName": "HSPICE",
+  "description": "Language server for HSPICE netlists: diagnostics, completion, hover, navigation and more.",
+  "version": "0.1.0",
+  "publisher": "benedicit",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Benedicit/HSPICE-lsp"
+  },
+  "engines": {
+    "vscode": "^1.91.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "activationEvents": [
+    "onLanguage:plaintext",
+    "onLanguage:perl"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "hspice",
+        "aliases": [
+          "HSPICE",
+          "hspice"
+        ],
+        "extensions": [
+          ".sp",
+          ".spice"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "hspice",
+        "scopeName": "source.hspice",
+        "path": "./syntaxes/hspice.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "hspice.restartServer",
+        "title": "Restart Language Server",
+        "category": "HSPICE"
+      }
+    ],
+    "configurationDefaults": {
+      "[hspice]": {
+        "editor.semanticHighlighting.enabled": true
+      }
+    },
+    "configuration": {
+      "title": "HSPICE",
+      "properties": {
+        "hspice.server.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the hspice-lsp binary. Empty: use the bundled binary, then hspice-lsp on PATH."
+        },
+        "hspice.includePaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra directories searched for .include and .lib files."
+        },
+        "hspice.diagnostics.floatingNodes": {
+          "type": "boolean",
+          "default": true,
+          "description": "Report nodes connected to a single terminal."
+        },
+        "hspice.diagnostics.unusedParams": {
+          "type": "boolean",
+          "default": true,
+          "description": "Report unused .param definitions."
+        },
+        "hspice.diagnostics.unknownOptions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Report unknown .option names."
+        },
+        "hspice.diagnostics.megSuffix": {
+          "type": "boolean",
+          "default": true,
+          "description": "Report suspicious m/meg suffix use."
+        },
+        "hspice.inlayHints.ports": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show port names on subcircuit instances."
+        },
+        "hspice.inlayHints.sourceArgs": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show argument names on source instances."
+        },
+        "hspice.workspaceScan.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Index other netlists in the workspace."
+        },
+        "hspice.workspaceScan.maxFiles": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 500,
+          "description": "Maximum number of files scanned."
+        },
+        "hspice.maxIncludeFileSizeMb": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 64,
+          "description": "Skip included files larger than this."
+        },
+        "hspice.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Trace the communication with the language server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "check": "tsc --noEmit -p .",
+    "vscode:prepublish": "npm run compile",
+    "test": "npm run compile && node test/run.js"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "1.91.0",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^4.1.0",
+    "typescript": "^5.9.3"
+  }
+}
