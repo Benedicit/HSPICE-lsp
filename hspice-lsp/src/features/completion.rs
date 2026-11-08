@@ -334,7 +334,15 @@ fn line_start_proposal(scan: &LineScan) -> Option<Proposal> {
 fn takes_expression_values(command: &str) -> bool {
     matches!(
         command,
-        ".param" | ".subckt" | ".measure" | ".if" | ".elseif" | ".ic" | ".nodeset" | ".global"
+        ".param"
+            | ".subckt"
+            | ".measure"
+            | ".if"
+            | ".elseif"
+            | ".ic"
+            | ".nodeset"
+            | ".global"
+            | ".mosra"
     )
 }
 
@@ -368,6 +376,7 @@ fn command_proposal(env: Env, scan: &LineScan) -> Option<Proposal> {
     }
     let candidates = match command {
         ".option" => sources::options(!current.is_empty()),
+        ".mosra" => sources::mosra_params(),
         ".model" => match n {
             0 => return None,
             1 => sources::model_types(),
@@ -608,20 +617,20 @@ mod tests {
         let items = complete(&open("* t\n.tr|"));
         let tran = items
             .iter()
-            .find(|item| item.label == ".tran")
-            .expect(".tran");
+            .find(|item| item.label == ".TRAN")
+            .expect(".TRAN");
         assert_eq!(
             edit_text(tran),
-            (".tran ${1:tstep} ${2:tstop}".to_string(), 0)
+            (".TRAN ${1:tstep} ${2:tstop}".to_string(), 0)
         );
         assert!(tran.insert_text_format.is_some());
-        assert!(items.iter().all(|item| item.label.starts_with(".tr")));
+        assert!(items.iter().all(|item| item.label.starts_with(".TR")));
     }
 
     #[test]
     fn commands_are_ranked_and_foreign_ones_skipped() {
         let items = complete(&open("* t\n|"));
-        assert!(items.iter().any(|item| item.label == ".tran"));
+        assert!(items.iter().any(|item| item.label == ".TRAN"));
         assert!(
             items
                 .iter()
@@ -636,8 +645,8 @@ mod tests {
         );
         let measure = items
             .iter()
-            .find(|item| item.label == ".measure")
-            .expect(".measure");
+            .find(|item| item.label == ".MEASURE")
+            .expect(".MEASURE");
         assert!(
             measure
                 .filter_text
@@ -682,7 +691,7 @@ mod tests {
         let found = labels("* t\n.subckt inv in out wn=1u wp=2u\n.ends\nX1 a b inv |");
         assert!(has(&found, "wn="));
         assert!(has(&found, "wp="));
-        assert!(has(&found, "m="));
+        assert!(has(&found, "M="));
         assert!(!has(&found, "inv"));
     }
 
@@ -694,7 +703,7 @@ mod tests {
         assert!(has(&found, "pch"));
         assert!(!has(&found, "nch.1"));
         assert!(!has(&found, "dd"));
-        assert!(has(&found, "w="));
+        assert!(has(&found, "W="));
     }
 
     #[test]
@@ -710,8 +719,8 @@ mod tests {
     #[test]
     fn completes_instance_keys() {
         let found = labels("* t\nR1 a b 1k t|");
-        assert!(has(&found, "tc1="));
-        assert!(!has(&found, "w="));
+        assert!(has(&found, "TC1="));
+        assert!(!has(&found, "W="));
     }
 
     #[test]
@@ -762,35 +771,37 @@ mod tests {
     #[test]
     fn completes_options() {
         let items = complete(&open("* t\n.option po|"));
-        assert!(items.iter().any(|item| item.label == "post"));
+        assert!(items.iter().any(|item| item.label == "POST"));
         let many = complete(&open("* t\n.option |"));
         assert!(!many.is_empty() && many.len() < 120);
         let accuracy = complete(&open("* t\n.option numd|"));
         let numdgt = accuracy
             .iter()
-            .find(|item| item.label == "numdgt")
-            .expect("numdgt");
-        assert_eq!(edit_text(numdgt).0, "numdgt=${1}");
+            .find(|item| item.label == "NUMDGT")
+            .expect("NUMDGT");
+        assert_eq!(edit_text(numdgt).0, "NUMDGT=${1}");
+        let renamed = complete(&open("* t\n.option run_l|"));
+        assert!(renamed.iter().any(|item| item.label == "RUNLVL"));
     }
 
     #[test]
     fn completes_model_types_and_params() {
         let found = labels("* t\n.model nch n|");
-        assert!(has(&found, "nmos") && !has(&found, "pmos"));
+        assert!(has(&found, "NMOS") && !has(&found, "PMOS"));
         let found = labels("* t\n.model nch nmos lev|");
-        assert!(has(&found, "level="));
+        assert!(has(&found, "LEVEL="));
         let found = labels("* t\n.model nch nmos (level=54 vt|");
-        assert!(has(&found, "vto=") || has(&found, "vth0="));
+        assert!(has(&found, "VTO=") || has(&found, "VTH0="));
         let found = labels("* t\n.model nch nmos level=1 |");
-        assert!(!has(&found, "level="));
+        assert!(!has(&found, "LEVEL="));
     }
 
     #[test]
     fn completes_analysis_keywords_and_sweep_variables() {
         let found = labels("* t\n.ac |");
-        assert!(has(&found, "dec") && has(&found, "lin"));
+        assert!(has(&found, "DEC") && has(&found, "LIN"));
         let found = labels("* t\n.tran 1n 10n |");
-        assert!(has(&found, "uic") && has(&found, "start="));
+        assert!(has(&found, "UIC") && has(&found, "START=") && has(&found, "SWEEP"));
         let found = labels("* t\nVin a 0 dc 1\n.param p=1\n.dc |");
         assert!(has(&found, "Vin") && has(&found, "p"));
         let found = labels("* t\nVin a 0 dc 1\nVx b 0 dc 1\n.dc Vin 0 1 0.1 |");
@@ -800,15 +811,15 @@ mod tests {
     #[test]
     fn completes_print_and_measure() {
         let found = labels("* t\n.print |");
-        assert!(has(&found, "tran") && has(&found, "v("));
+        assert!(has(&found, "TRAN") && has(&found, "V("));
         let found = labels("* t\nR1 a b 1k\n.print tran v(|");
         assert!(has(&found, "a") && has(&found, "b"));
         let found = labels("* t\nVdd a 0 1\nR1 a b 1k\n.probe tran i(|");
         assert!(has(&found, "Vdd") && has(&found, "R1"));
         let found = labels("* t\n.meas |");
-        assert!(has(&found, "tran"));
+        assert!(has(&found, "TRAN"));
         let found = labels("* t\n.param lvl=1\n.meas tran d trig v(a) |");
-        assert!(has(&found, "val=") && has(&found, "targ") && has(&found, "lvl"));
+        assert!(has(&found, "VAL=") && has(&found, "TARG") && has(&found, "lvl"));
         let found = labels("* t\nR1 a b 1k\n.meas tran d trig v(|)");
         assert!(has(&found, "a"));
     }

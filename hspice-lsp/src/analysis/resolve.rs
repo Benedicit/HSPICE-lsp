@@ -11,7 +11,7 @@ use super::symbols::{
 use crate::lang::elements::{ElementSpec, find_element, find_source_function, is_ground};
 use crate::lang::functions::{find_function, find_special_variable, is_optimization_function};
 use crate::lang::measure::{ANALYSIS_KEYWORDS, ANALYSIS_TYPES, MEASURE_KEYWORDS};
-use crate::lang::output_vars::{OutputArgKind, find_output_var};
+use crate::lang::output_vars::{OutputArgKind, find_output_var, output_argument};
 use crate::lang::{KeywordSpec, find_named};
 use crate::syntax::ast::{
     Arg, AssignKey, Assignment, Call, Command, CommandKind, Element, Expr, ExprKind, Ident,
@@ -1045,6 +1045,7 @@ impl Collector<'_> {
                 assignment_value_refs(args, scope)
             }
             ".fft" => assignment_value_refs(&without_keys(args, FFT_WORD_KEYS), scope),
+            ".mosra" => assignment_value_refs(&without_keys(args, MOSRA_WORD_KEYS), scope),
             _ => Vec::new(),
         };
         outputs.chain(specific).collect()
@@ -1088,16 +1089,16 @@ fn call_words(call: &Call) -> impl Iterator<Item = &Ident> {
 
 /// Collects node or element references of an output variable such as `v(a,b)` or `i(vdd)`.
 ///
-/// Hierarchical names (`x1.out`) are skipped.
+/// Wildcards and ground are skipped.
 ///
 /// # Arguments
 /// * `call` - output-variable call
 /// * `scope` - scope of the statement
 fn output_refs(call: &Call, scope: ScopeId) -> Vec<Pending> {
-    let Some(spec) = find_output_var(&call.name.key) else {
+    let Some(argument) = output_argument(&call.name.key) else {
         return Vec::new();
     };
-    let kinds = match spec.argument {
+    let kinds = match argument {
         OutputArgKind::Nodes => NODE,
         OutputArgKind::Element => ELEMENT,
         OutputArgKind::Expression => {
@@ -1111,13 +1112,16 @@ fn output_refs(call: &Call, scope: ScopeId) -> Vec<Pending> {
         OutputArgKind::Other => return Vec::new(),
     };
     call_words(call)
-        .filter(|word| !word.text.contains(['.', '*', '?', ':']) && !is_ground(&word.text))
+        .filter(|word| !word.text.contains(['*', '?', ':']) && !is_ground(&word.text))
         .map(|word| Pending::new(kinds, word, scope, RefContext::Output))
         .collect()
 }
 
 /// `.fft` keys whose values are keywords such as `HANN` or `NORM`, not expressions.
 const FFT_WORD_KEYS: &[&str] = &["window", "format"];
+
+/// `.mosra` keys whose values are keywords or instance patterns, not expressions.
+const MOSRA_WORD_KEYS: &[&str] = &["mosralife", "aginginst"];
 
 /// Returns the arguments without the assignments to the given keys.
 ///
@@ -1292,8 +1296,8 @@ fn call_expr_refs(name: &Ident, args: &[Expr], scope: ScopeId, formals: &[&str])
     if matches!(key, "str" | "def" | "val" | "valm" | "valp") {
         return Vec::new();
     }
-    if let Some(output) = find_output_var(key) {
-        let kinds = match output.argument {
+    if let Some(argument) = output_argument(key) {
+        let kinds = match argument {
             OutputArgKind::Nodes => NODE,
             OutputArgKind::Element => ELEMENT,
             OutputArgKind::Expression => {
@@ -1307,7 +1311,7 @@ fn call_expr_refs(name: &Ident, args: &[Expr], scope: ScopeId, formals: &[&str])
         return args
             .iter()
             .filter_map(|arg| match &arg.kind {
-                ExprKind::Ident(ident) if !ident.key.contains('.') && !is_ground(&ident.text) => {
+                ExprKind::Ident(ident) if !is_ground(&ident.text) => {
                     Some(Pending::new(kinds, ident, scope, RefContext::Output))
                 }
                 _ => None,

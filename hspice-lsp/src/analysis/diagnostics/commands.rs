@@ -1,4 +1,4 @@
-//! Command rules: unknown, foreign and obsolete commands, model types and options.
+//! Command rules: unknown, foreign and obsolete commands, model types, options and `.mosra` parameters.
 
 use super::common::live_commands;
 use super::{Diagnostic, Severity};
@@ -9,6 +9,7 @@ use crate::lang::Status;
 use crate::lang::commands::find_command;
 use crate::lang::measure::RESERVED_MEASURE_NAMES;
 use crate::lang::models::find_model_type;
+use crate::lang::mosra::find_mosra_param;
 use crate::lang::options::find_option;
 use crate::state::document::SyntaxInfo;
 use crate::syntax::ast::{Arg, AssignKey, Command, CommandKind, Ident};
@@ -30,6 +31,7 @@ pub fn check(
                 .into_iter()
                 .chain(model_type_status(command))
                 .chain(option_diagnostics(command, settings))
+                .chain(mosra_diagnostics(command, settings))
                 .collect::<Vec<_>>()
         })
         .chain(reserved_measure_names(analysis))
@@ -139,7 +141,7 @@ fn option_diagnostics(command: &Command, settings: &DiagnosticSettings) -> Vec<D
         return Vec::new();
     };
     args.iter()
-        .filter_map(option_name)
+        .filter_map(argument_name)
         .filter_map(|name| match find_option(&name.key) {
             None => settings.unknown_options.then(|| {
                 Diagnostic::new(
@@ -158,11 +160,46 @@ fn option_diagnostics(command: &Command, settings: &DiagnosticSettings) -> Vec<D
         .collect()
 }
 
-/// Returns the option name of an argument: a bare word or the key of an assignment.
+/// Reports unknown `.mosra` parameters and a missing `RelTotalTime`.
 ///
 /// # Arguments
-/// * `arg` - `.option` argument
-fn option_name(arg: &Arg) -> Option<&Ident> {
+/// * `command` - dot command
+/// * `settings` - diagnostic toggles
+fn mosra_diagnostics(command: &Command, settings: &DiagnosticSettings) -> Vec<Diagnostic> {
+    let CommandKind::Generic { args } = &command.kind else {
+        return Vec::new();
+    };
+    if command.keyword.key != ".mosra" {
+        return Vec::new();
+    }
+    let names: Vec<&Ident> = args.iter().filter_map(argument_name).collect();
+    let missing_total = (!names.iter().any(|name| name.key == "reltotaltime")).then(|| {
+        Diagnostic::new(
+            command.keyword.range,
+            Severity::Warning,
+            "mosra-args",
+            "`.MOSRA` requires `RelTotalTime`",
+        )
+    });
+    let unknown = names
+        .into_iter()
+        .filter(|name| settings.unknown_options && find_mosra_param(&name.key).is_none())
+        .map(|name| {
+            Diagnostic::new(
+                name.range,
+                Severity::Hint,
+                "unknown-mosra-param",
+                format!("Unknown `.MOSRA` parameter `{}`", name.text),
+            )
+        });
+    missing_total.into_iter().chain(unknown).collect()
+}
+
+/// Returns the name of an argument: a bare word or the key of an assignment.
+///
+/// # Arguments
+/// * `arg` - `.option` or `.mosra` argument
+fn argument_name(arg: &Arg) -> Option<&Ident> {
     match arg {
         Arg::Value(crate::syntax::ast::Value::Word(word)) => Some(word),
         Arg::Assign(assignment) => match &assignment.key {

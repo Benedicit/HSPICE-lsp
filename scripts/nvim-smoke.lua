@@ -136,9 +136,9 @@ local completion = request(client, bufnr, "textDocument/completion", {
 })
 local items = completion and (completion.items or completion) or {}
 local has_tran = vim.iter(items):any(function(item)
-  return item.label == ".tran"
+  return item.label == ".TRAN"
 end)
-report(has_tran, "completion offers .tran")
+report(has_tran, "completion offers .TRAN")
 vim.api.nvim_buf_set_lines(bufnr, line_count, line_count + 1, false, {})
 
 -- Hover on the first .param name.

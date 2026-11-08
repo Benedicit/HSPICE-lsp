@@ -106,6 +106,7 @@ pub fn compute(
         .chain(elements::check(analysis))
         .chain(functions::check(syntax, analysis))
         .chain(nodes::no_ground(syntax, analysis))
+        .chain(nodes::undefined_output_targets(syntax, analysis))
         .chain(floating)
         .chain(commands::check(syntax, analysis, settings))
         .chain(analyses::check(syntax, analysis))

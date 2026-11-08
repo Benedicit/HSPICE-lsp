@@ -238,3 +238,36 @@ fn clean_fixture_hints_are_justified() {
         )
     );
 }
+
+#[test]
+fn output_names_are_not_checked_where_included_files_may_define_them() {
+    let codes = |text: &str| -> Vec<&'static str> {
+        let mut workspace = Workspace::new(
+            Some(fixture_path("")),
+            PositionEncoding::Utf16,
+            Settings::default(),
+        );
+        let Some(uri) = Uri::from_file_path(fixture_path("inline_tb.sp")) else {
+            return Vec::new();
+        };
+        workspace.update(uri.clone(), 1, text.to_string());
+        workspace
+            .document(&uri)
+            .map(|document| document.diagnostics.iter().map(|d| d.code).collect())
+            .unwrap_or_default()
+    };
+    let base = "tb\nV1 a 0 1\nR1 a 0 1k\n";
+    assert!(codes(&format!("{base}.print v(nosuch)\n")).contains(&"undefined-node"));
+    let unresolved = codes(&format!("{base}.include 'missing.sp'\n.print v(nosuch)\n"));
+    assert!(!unresolved.contains(&"undefined-node"));
+    let resolved = codes(&format!(
+        "{base}.include 'cells/inv.inc'\n.print v(vdd) v(nosuch)\n"
+    ));
+    assert_eq!(
+        resolved
+            .iter()
+            .filter(|code| **code == "undefined-node")
+            .count(),
+        1
+    );
+}

@@ -19,12 +19,13 @@ Everything is based solely upon publicly available manuals/reference sheets onli
   - built-in function arity, analysis arguments (`.tran`, `.ac`, `.dc`, `.noise`, `.tf`, `.pz`)
   - include files or library sections that are not found
   - floating nodes and missing ground
-  - unknown, obsolete or foreign-dialect commands and options
+  - nodes and elements in output variables that do not exist (`.print v(out)`, `i(R1)`, `v(x1.out)`)
+  - unknown, obsolete or foreign-dialect commands and options, unknown `.MOSRA` parameters
   - `10M` vs `10MEG`, unused parameters
-- **Completion**: dot commands and element templates (snippets), subckts, models matching the element type, nodes, parameters, functions, instance/model parameters, source functions, `.option` names, analysis and `.measure` keywords, output variables, include paths and `.lib` sections.
-- **Hover**: command synopses, element terminal mapping, parameter values (evaluated), subckt and model cards, node connections, number values (`10M` = 1e-2).
+- **Completion**: dot commands and element templates (snippets, HSPICE keywords in uppercase), subckts, models matching the element type, nodes, parameters, functions, instance/model parameters, source functions, `.option` names, analysis and `.measure` keywords, output variables, include paths and `.lib` sections.
+- **Hover**: command synopses with argument descriptions, element terminal mapping, parameter values (evaluated), subckt and model cards, node connections, number values (`10M` = 1e-2).
 - **Navigation**: go to definition (including into `.include`/`.lib` files and all model bins), find references, document highlight, rename.
-- **Structure**: document and workspace symbols, folding ranges.
+- **Structure**: document and workspace symbols, folding ranges (comment runs only with `folding.comments`).
 - **Highlighting**: semantic tokens on top of tree-sitter (Neovim) or a basic TextMate grammar (VS Code).
 - **Editing help**: signature help, inlay hints (subckt port and terminal names, source-function arguments), quick fixes (`MEG`, add `.param`, insert closers and `.end`, "did you mean …").
 
@@ -96,6 +97,7 @@ opts = {
     diagnostics = { floatingNodes = true, unusedParams = true, unknownOptions = true, megSuffix = true },
     inlayHints = { ports = true, sourceArgs = true },
     workspaceScan = { enabled = true, maxFiles = 500 },
+    folding = { comments = false },
     maxIncludeFileSizeMb = 64,
   },
 }
@@ -110,10 +112,11 @@ Settings are sent as `initializationOptions` and as `settings.hspice` in `worksp
 | `includePaths` | `{}` | Extra directories searched for `.include` and `.lib` files |
 | `diagnostics.floatingNodes` | `true` | Report nodes connected to a single terminal |
 | `diagnostics.unusedParams` | `true` | Report unused `.param` definitions |
-| `diagnostics.unknownOptions` | `true` | Report unknown `.option` names |
+| `diagnostics.unknownOptions` | `true` | Report unknown `.option` names and `.MOSRA` parameters |
 | `diagnostics.megSuffix` | `true` | Report suspicious `m`/`meg` suffix use |
 | `inlayHints.ports` | `true` | Show port names on subcircuit instances |
 | `inlayHints.sourceArgs` | `true` | Show argument names on source instances |
+| `folding.comments` | `false` | Fold runs of consecutive comment lines |
 | `workspaceScan.enabled` | `true` | Index other netlists in the workspace |
 | `workspaceScan.maxFiles` | `500` | Maximum number of files scanned |
 | `maxIncludeFileSizeMb` | `64` | Skip included files larger than this |

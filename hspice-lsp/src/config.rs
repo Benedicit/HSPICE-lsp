@@ -14,6 +14,8 @@ pub struct Settings {
     pub inlay_hints: InlayHintSettings,
     /// Workspace scan used to find netlists that include an open file.
     pub workspace_scan: WorkspaceScanSettings,
+    /// Toggles for folding ranges.
+    pub folding: FoldingSettings,
     /// Included files larger than this are skipped.
     pub max_include_file_size_mb: u64,
 }
@@ -26,7 +28,7 @@ pub struct DiagnosticSettings {
     pub floating_nodes: bool,
     /// Hint about parameters that are never used.
     pub unused_params: bool,
-    /// Hint about unknown `.option` names.
+    /// Hint about unknown `.option` names and `.mosra` parameters.
     pub unknown_options: bool,
     /// Hint when `M` (milli) is probably meant as `MEG`.
     pub meg_suffix: bool,
@@ -40,6 +42,14 @@ pub struct InlayHintSettings {
     pub ports: bool,
     /// Argument names inside `pulse(…)`, `sin(…)` and similar source functions.
     pub source_args: bool,
+}
+
+/// Toggles for folding ranges.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct FoldingSettings {
+    /// Fold runs of consecutive comment lines.
+    pub comments: bool,
 }
 
 /// Bounds for the workspace scan.
@@ -59,6 +69,7 @@ impl Default for Settings {
             diagnostics: DiagnosticSettings::default(),
             inlay_hints: InlayHintSettings::default(),
             workspace_scan: WorkspaceScanSettings::default(),
+            folding: FoldingSettings::default(),
             max_include_file_size_mb: 64,
         }
     }
@@ -120,6 +131,7 @@ mod tests {
         assert!(!settings.diagnostics.floating_nodes);
         assert!(settings.diagnostics.meg_suffix);
         assert_eq!(settings.workspace_scan.max_files, 500);
+        assert!(!settings.folding.comments);
     }
 
     #[test]

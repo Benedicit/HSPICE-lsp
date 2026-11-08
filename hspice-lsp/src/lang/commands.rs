@@ -1,5 +1,6 @@
 //! Dot commands: names, aliases, synopses and completion snippets.
 
+use super::elements::ParamSpec;
 use super::{Named, Status, Usage, find_named};
 
 /// Broad grouping of dot commands, used for documentation and symbol kinds.
@@ -36,8 +37,10 @@ pub struct CommandSpec {
     pub usage: Usage,
     /// Support status.
     pub status: Status,
-    /// LSP snippet including the leading dot (e.g. `.tran ${1:tstep} ${2:tstop}`); `None` inserts the name.
+    /// LSP snippet including the leading dot (e.g. `.TRAN ${1:tstep} ${2:tstop}`); `None` inserts the name.
     pub snippet: Option<&'static str>,
+    /// Arguments of the synopsis with their meaning (empty if not documented).
+    pub arguments: &'static [ParamSpec],
 }
 
 impl Named for CommandSpec {
@@ -50,9 +53,12 @@ impl Named for CommandSpec {
     }
 }
 
-/// Builds one `CommandSpec`; usage is `C`ommon, `O`ccasional or `R`are.
+/// Builds one `CommandSpec`, optionally with `[("arg", "meaning"), ...]` argument docs.
 macro_rules! command {
     ($name:literal, [$($alias:literal),*], $category:ident, $usage:ident, $status:ident, $snippet:expr, $synopsis:literal, $description:literal) => {
+        command!($name, [$($alias),*], $category, $usage, $status, $snippet, $synopsis, $description, [])
+    };
+    ($name:literal, [$($alias:literal),*], $category:ident, $usage:ident, $status:ident, $snippet:expr, $synopsis:literal, $description:literal, [$(($argument:literal, $meaning:literal)),* $(,)?]) => {
         CommandSpec {
             name: $name,
             aliases: &[$($alias),*],
@@ -62,6 +68,7 @@ macro_rules! command {
             usage: Usage::$usage,
             status: Status::$status,
             snippet: $snippet,
+            arguments: &[$(ParamSpec { name: $argument, description: $meaning }),*],
         }
     };
 }
@@ -74,9 +81,25 @@ pub static COMMANDS: &[CommandSpec] = &[
         Analysis,
         Common,
         Supported,
-        Some(".ac ${1|dec,oct,lin,poi|} ${2:np} ${3:fstart} ${4:fstop}"),
+        Some(".AC ${1:DEC} ${2:np} ${3:fstart} ${4:fstop}"),
         ".AC DEC|OCT|LIN|POI np fstart fstop <SWEEP spec>\n.AC DATA=datanm <SWEEP spec>",
-        "AC small-signal frequency sweep (needs a source with an AC value)."
+        "AC small-signal frequency sweep (needs a source with an AC value).",
+        [
+            (
+                "DEC|OCT|LIN|POI",
+                "Sweep type: points per decade, per octave, linear total, or a list of points"
+            ),
+            (
+                "np",
+                "Number of points (per decade/octave for DEC/OCT, total for LIN/POI)"
+            ),
+            ("fstart", "Start frequency"),
+            ("fstop", "Stop frequency"),
+            (
+                "SWEEP",
+                "Optional outer sweep of a parameter, source, TEMP, DATA or MONTE"
+            ),
+        ]
     ),
     command!(
         ".dc",
@@ -84,9 +107,17 @@ pub static COMMANDS: &[CommandSpec] = &[
         Analysis,
         Common,
         Supported,
-        Some(".dc ${1:source} ${2:start} ${3:stop} ${4:step}"),
+        Some(".DC ${1:source} ${2:start} ${3:stop} ${4:step}"),
         ".DC var1 start1 stop1 incr1 <var2 start2 stop2 incr2 | SWEEP spec>\n.DC var1 DEC|OCT|LIN|POI np start stop\n.DC DATA=d\n.DC MONTE=n",
-        "DC sweep of a source, parameter or TEMP."
+        "DC sweep of a source, parameter or TEMP.",
+        [
+            ("var1", "Swept independent source, .PARAM name or TEMP"),
+            ("start1", "Start value"),
+            ("stop1", "Stop value"),
+            ("incr1", "Step size"),
+            ("var2 ...", "Optional nested second sweep"),
+            ("SWEEP", "Optional outer sweep (DATA, MONTE, OPTIMIZE ...)"),
+        ]
     ),
     command!(
         ".tran",
@@ -94,9 +125,25 @@ pub static COMMANDS: &[CommandSpec] = &[
         Analysis,
         Common,
         Supported,
-        Some(".tran ${1:tstep} ${2:tstop}"),
+        Some(".TRAN ${1:tstep} ${2:tstop}"),
         ".TRAN tstep1 tstop1 <tstep2 tstop2 ...> <START=val> <UIC> <SWEEP spec>\n.TRAN DATA=d",
-        "Transient analysis."
+        "Transient analysis.",
+        [
+            (
+                "tstep",
+                "Printing/plotting increment, also the initial timestep guess"
+            ),
+            ("tstop", "End time of the simulation"),
+            ("START", "Time from which results are written (default 0)"),
+            (
+                "UIC",
+                "Use the .IC initial conditions and skip the DC operating point"
+            ),
+            (
+                "SWEEP",
+                "Optional outer sweep of a parameter, source, TEMP, DATA or MONTE"
+            ),
+        ]
     ),
     command!(
         ".op",
@@ -106,7 +153,21 @@ pub static COMMANDS: &[CommandSpec] = &[
         Supported,
         None,
         ".OP <ALL|BRIEF|CURRENT|DEBUG|NONE|VOLTAGE> <time> <format time ...> <INTERPOLATION>",
-        "DC operating point."
+        "DC operating point.",
+        [
+            (
+                "ALL|BRIEF|CURRENT|DEBUG|NONE|VOLTAGE",
+                "What to print: everything, a summary, currents, debug data, nothing, or node voltages"
+            ),
+            (
+                "time",
+                "Transient times at which an operating point is printed"
+            ),
+            (
+                "INTERPOLATION",
+                "Interpolate to the exact times instead of using the nearest timestep"
+            ),
+        ]
     ),
     command!(
         ".noise",
@@ -116,7 +177,15 @@ pub static COMMANDS: &[CommandSpec] = &[
         Supported,
         None,
         ".NOISE ov srcnam <inter> <listckt=1|0> <listfreq=(f..)|none|all> <listcount=n> <listfloor=v> <listsources=1|0|yes|no>",
-        "Noise analysis (used together with .AC)."
+        "Noise analysis (used together with .AC).",
+        [
+            ("ov", "Output variable: V(n), V(n1,n2) or I(elem)"),
+            ("srcnam", "Independent source used as noise input reference"),
+            (
+                "inter",
+                "Print the noise summary every inter frequency points"
+            ),
+        ]
     ),
     command!(
         ".tf",
@@ -126,7 +195,11 @@ pub static COMMANDS: &[CommandSpec] = &[
         Supported,
         None,
         ".TF ov srcnam",
-        "DC small-signal transfer function."
+        "DC small-signal transfer function.",
+        [
+            ("ov", "Output variable: V(n), V(n1,n2) or I(elem)"),
+            ("srcnam", "Independent input source"),
+        ]
     ),
     command!(
         ".sens",
@@ -146,7 +219,11 @@ pub static COMMANDS: &[CommandSpec] = &[
         Supported,
         None,
         ".PZ ov srcnam",
-        "Pole/zero analysis."
+        "Pole/zero analysis.",
+        [
+            ("ov", "Output variable: V(n) or I(elem)"),
+            ("srcnam", "Independent input source"),
+        ]
     ),
     command!(
         ".four",
@@ -156,7 +233,11 @@ pub static COMMANDS: &[CommandSpec] = &[
         Supported,
         None,
         ".FOUR freq ov1 <ov2 ...>",
-        "Fourier analysis of the transient result."
+        "Fourier analysis of the transient result.",
+        [
+            ("freq", "Fundamental frequency"),
+            ("ov1 ...", "Output variables to analyse"),
+        ]
     ),
     command!(
         ".fft",
@@ -166,7 +247,17 @@ pub static COMMANDS: &[CommandSpec] = &[
         Supported,
         None,
         ".FFT ov <START=|FROM=v> <STOP=|TO=v> <NP=v> <FORMAT=NORM|UNORM> <WINDOW=RECT|BART|HANN|HAMM|BLACK|HARRIS|GAUSS|KAISER> <ALFA=v> <FREQ=v> <FMIN=v> <FMAX=v>",
-        "Spectrum of the transient result."
+        "Spectrum of the transient result.",
+        [
+            ("ov", "Output variable to transform"),
+            ("START/STOP", "Time window (default whole transient)"),
+            ("NP", "Number of points, a power of 2 (default 1024)"),
+            ("FORMAT", "NORM (normalized) or UNORM"),
+            (
+                "WINDOW",
+                "Window function: RECT, BART, HANN, HAMM, BLACK, HARRIS, GAUSS, KAISER"
+            ),
+        ]
     ),
     command!(
         ".temp",
@@ -174,9 +265,13 @@ pub static COMMANDS: &[CommandSpec] = &[
         Analysis,
         Common,
         Supported,
-        Some(".temp ${1:25}"),
+        Some(".TEMP ${1:25}"),
         ".TEMP t1 <t2 ...>",
-        "Simulation temperature(s)."
+        "Simulation temperature(s).",
+        [(
+            "t1 ...",
+            "Simulation temperatures in degrees Celsius; each runs all analyses"
+        ),]
     ),
     command!(
         ".disto",
@@ -534,9 +629,16 @@ pub static COMMANDS: &[CommandSpec] = &[
         Output,
         Common,
         Supported,
-        Some(".print ${1|tran,ac,dc|} v(${2:node})"),
+        Some(".PRINT ${1:TRAN} V(${2:node})"),
         ".PRINT <DC|AC|TRAN|NOISE|DISTO> ov1 <ov2 ...>",
-        "Print output variables to the listing file (.lis)."
+        "Print output variables to the listing file (.lis).",
+        [
+            ("antype", "Analysis type: DC, AC, TRAN, NOISE or DISTO"),
+            (
+                "ov1 ...",
+                "Output variables: V(n), V(n1,n2), I(elem), PAR('expr') ..."
+            ),
+        ]
     ),
     command!(
         ".probe",
@@ -544,9 +646,16 @@ pub static COMMANDS: &[CommandSpec] = &[
         Output,
         Common,
         Supported,
-        Some(".probe ${1|tran,ac,dc|} v(${2:node})"),
+        Some(".PROBE ${1:TRAN} V(${2:node})"),
         ".PROBE <antype> ov1 <ov2 ...>",
-        "Save output variables to the waveform file."
+        "Save output variables to the waveform file.",
+        [
+            ("antype", "Analysis type: DC, AC, TRAN ..."),
+            (
+                "ov1 ...",
+                "Output variables written to the waveform file: V(n), I(elem) ..."
+            ),
+        ]
     ),
     command!(
         ".measure",
@@ -555,10 +664,22 @@ pub static COMMANDS: &[CommandSpec] = &[
         Common,
         Supported,
         Some(
-            ".meas tran ${1:name} trig v(${2:in}) val=${3} rise=1 targ v(${4:out}) val=${5} fall=1"
+            ".MEAS TRAN ${1:name} TRIG V(${2:in}) VAL=${3} RISE=1 TARG V(${4:out}) VAL=${5} FALL=1"
         ),
         ".MEAS <DC|AC|TRAN|DC_CONT|AC_CONT|TRAN_CONT> result <body> <GOAL=v> <MINVAL=v> <WEIGHT=v> <PRINT=0|1>",
-        "Measurement on simulation results."
+        "Measurement on simulation results.",
+        [
+            ("DC|AC|TRAN", "Analysis whose results are measured"),
+            ("result", "Name of the measurement result"),
+            (
+                "body",
+                "TRIG ... TARG ..., FIND ... WHEN/AT ..., AVG/RMS/MIN/MAX/PP ... FROM= TO=, INTEG, DERIV or PARAM='expr'"
+            ),
+            (
+                "GOAL/MINVAL/WEIGHT",
+                "Optimization target, minimum value and weight"
+            ),
+        ]
     ),
     command!(
         ".biaschk",
@@ -626,9 +747,13 @@ pub static COMMANDS: &[CommandSpec] = &[
         Control,
         Common,
         Supported,
-        Some(".option ${1:post}"),
+        Some(".OPTION ${1:POST}"),
         ".OPTION opt1<=v> <opt2<=v> ...>",
-        "Simulator options; a bare name sets the option to 1, the last setting wins."
+        "Simulator options; a bare name sets the option to 1, the last setting wins.",
+        [(
+            "opt",
+            "Option name; options with values are written opt=value"
+        ),]
     ),
     command!(
         ".param",
@@ -636,9 +761,17 @@ pub static COMMANDS: &[CommandSpec] = &[
         Control,
         Common,
         Supported,
-        Some(".param ${1:name}=${2:value}"),
+        Some(".PARAM ${1:name}=${2:value}"),
         ".PARAM n=val|'expr' ...\n.PARAM f(a,b)='expr'",
-        "Parameters and user-defined functions."
+        "Parameters and user-defined functions.",
+        [
+            ("n", "Parameter name"),
+            (
+                "val|'expr'",
+                "Number, quoted expression or distribution such as AGAUSS(nom,abs,sigma)"
+            ),
+            ("f(a,b)", "Function definition with formal arguments"),
+        ]
     ),
     command!(
         ".ic",
@@ -646,9 +779,17 @@ pub static COMMANDS: &[CommandSpec] = &[
         Control,
         Common,
         Supported,
-        Some(".ic v(${1:node})=${2:0}"),
+        Some(".IC V(${1:node})=${2:0}"),
         ".IC V(n1)=v1 <V(n2)=v2 ...> <subckt=name>",
-        "Transient initial conditions."
+        "Transient initial conditions.",
+        [
+            (
+                "V(n)",
+                "Node whose voltage is fixed during the initial DC solution"
+            ),
+            ("v", "Initial voltage"),
+            ("subckt", "Apply only inside instances of this subcircuit"),
+        ]
     ),
     command!(
         ".nodeset",
@@ -658,7 +799,11 @@ pub static COMMANDS: &[CommandSpec] = &[
         Supported,
         None,
         ".NODESET V(n1)=v1 ...\n.NODESET n1 v1 ...",
-        "DC operating-point hints."
+        "DC operating-point hints.",
+        [
+            ("V(n)", "Node with an initial guess for the DC solution"),
+            ("v", "Initial guess, released after the first iterations"),
+        ]
     ),
     command!(
         ".dcvolt",
@@ -676,9 +821,14 @@ pub static COMMANDS: &[CommandSpec] = &[
         Control,
         Common,
         Supported,
-        Some(".data ${1:name} ${2:params}\n+ $0\n.enddata"),
+        Some(".DATA ${1:name} ${2:params}\n+ $0\n.ENDDATA"),
         ".DATA name p1 <p2..> v1 <v2..> ... .ENDDATA\n.DATA name MER|LAM FILE='f' p1=col ... .ENDDATA",
-        "Data table for sweeps; closed by .ENDDATA."
+        "Data table for sweeps; closed by .ENDDATA.",
+        [
+            ("name", "Name of the data block, used with DATA=name"),
+            ("p1 ...", "Column (parameter) names"),
+            ("v1 ...", "Values, one row per sweep point"),
+        ]
     ),
     command!(
         ".enddata",
@@ -696,9 +846,10 @@ pub static COMMANDS: &[CommandSpec] = &[
         Control,
         Common,
         Supported,
-        Some(".global ${1:vdd}"),
+        Some(".GLOBAL ${1:vdd}"),
         ".GLOBAL n1 <n2 ...>",
-        "Global nodes visible in all subcircuits."
+        "Global nodes visible in all subcircuits.",
+        [("n1 ...", "Nodes shared by all subcircuits"),]
     ),
     command!(
         ".title",
@@ -716,7 +867,7 @@ pub static COMMANDS: &[CommandSpec] = &[
         Control,
         Common,
         Supported,
-        Some(".end"),
+        Some(".END"),
         ".END <comment>",
         "End of the netlist (deck); text after it starts a new deck."
     ),
@@ -726,9 +877,13 @@ pub static COMMANDS: &[CommandSpec] = &[
         Control,
         Common,
         Supported,
-        Some(".alter ${1:title}"),
+        Some(".ALTER ${1:title}"),
         ".ALTER <title>",
-        "Re-run the simulation with changes."
+        "Re-run the simulation with changes.",
+        [(
+            "title",
+            "Title of the rerun; following statements replace earlier ones"
+        ),]
     ),
     command!(
         ".save",
@@ -766,7 +921,7 @@ pub static COMMANDS: &[CommandSpec] = &[
         Control,
         Occasional,
         Supported,
-        Some(".if (${1:condition})\n\t$0\n.endif"),
+        Some(".IF (${1:condition})\n\t$0\n.ENDIF"),
         ".IF (cond) ... .ELSEIF (cond) ... .ELSE ... .ENDIF",
         "Conditional block."
     ),
@@ -836,9 +991,10 @@ pub static COMMANDS: &[CommandSpec] = &[
         Files,
         Common,
         Supported,
-        Some(".include '${1:file}'"),
+        Some(".INCLUDE '${1:file}'"),
         ".INCLUDE '<path>file'",
-        "Include another file; nested paths resolve relative to the including file."
+        "Include another file; nested paths resolve relative to the including file.",
+        [("file", "Netlist file to insert, in quotes"),]
     ),
     command!(
         ".lib",
@@ -846,9 +1002,13 @@ pub static COMMANDS: &[CommandSpec] = &[
         Files,
         Common,
         Supported,
-        Some(".lib '${1:file}' ${2:section}"),
+        Some(".LIB '${1:file}' ${2:section}"),
         ".LIB '<path>file' entry\n.LIB entry",
-        "Call a library section or start a library section definition."
+        "Call a library section or start a library section definition.",
+        [
+            ("file", "Library file, in quotes"),
+            ("entry", "Section between .LIB entry and .ENDL entry"),
+        ]
     ),
     command!(
         ".endl",
@@ -916,9 +1076,18 @@ pub static COMMANDS: &[CommandSpec] = &[
         Models,
         Common,
         Supported,
-        Some(".model ${1:name} ${2|nmos,pmos,npn,pnp,d,r,c|} level=${3}"),
+        Some(".MODEL ${1:name} ${2:NMOS} LEVEL=${3}"),
         ".MODEL mname type <LEVEL=n> <VERSION=v> <p1=v1 ...>",
-        "Model card; parameters may be wrapped in parentheses."
+        "Model card; parameters may be wrapped in parentheses.",
+        [
+            ("mname", "Model name used by elements"),
+            (
+                "type",
+                "Model type: NMOS, PMOS, NPN, PNP, D, R, C, L, SW ..."
+            ),
+            ("LEVEL", "Model level (e.g. 54 for BSIM4)"),
+            ("p1=v1 ...", "Model parameters"),
+        ]
     ),
     command!(
         ".subckt",
@@ -926,9 +1095,14 @@ pub static COMMANDS: &[CommandSpec] = &[
         Models,
         Common,
         Supported,
-        Some(".subckt ${1:name} ${2:ports}\n\t$0\n.ends ${1:name}"),
+        Some(".SUBCKT ${1:name} ${2:ports}\n\t$0\n.ENDS ${1:name}"),
         ".SUBCKT name n1 <n2 ...> <p=val ...>",
-        "Start of a subcircuit definition."
+        "Start of a subcircuit definition.",
+        [
+            ("name", "Subcircuit name used by X instances"),
+            ("n1 ...", "Port nodes in order"),
+            ("p=val ...", "Parameters with default values"),
+        ]
     ),
     command!(
         ".ends",
@@ -938,7 +1112,8 @@ pub static COMMANDS: &[CommandSpec] = &[
         Supported,
         None,
         ".ENDS <name>",
-        "End of a subcircuit definition."
+        "End of a subcircuit definition.",
+        [("name", "Optional name of the subcircuit being closed"),]
     ),
     command!(
         ".alias",
@@ -1076,9 +1251,29 @@ pub static COMMANDS: &[CommandSpec] = &[
         Models,
         Rare,
         Supported,
-        None,
-        ".MOSRA RelTotalTime=t <RelStartTime=> ...",
-        "MOSFET reliability analysis."
+        Some(".MOSRA RELTOTALTIME=${1:time} RELSTEP=${2:step}"),
+        ".MOSRA RelTotalTime=t <RelStartTime=t> <DEC=n|LIN=n|RelStep=t> <RelMode=0|1|2> <SimMode=0|1|2|3> <AgingStart=t> <AgingStop=t> <AgingPeriod=t> <AgingWidth=t> <AgingInst=\"inst\"> <...>",
+        "MOSFET HCI/BTI reliability (aging) analysis: a fresh pre-stress transient run followed by post-stress runs.",
+        [
+            (
+                "RelTotalTime",
+                "Final reliability time of the post-stress simulation (required)"
+            ),
+            ("RelStep", "Post-stress time step (or DEC/LIN points)"),
+            ("RelMode", "0 HCI and BTI, 1 HCI only, 2 BTI only"),
+            (
+                "SimMode",
+                "0 pre-stress, 1 post-stress, 2 both, 3 continual through .ALTER"
+            ),
+            (
+                "AgingStart/AgingStop",
+                "Transient window in which stress is computed"
+            ),
+            (
+                "AgingInst",
+                "Quoted MOSFET instances to age (wildcards allowed)"
+            ),
+        ]
     ),
     command!(
         ".mosra_subckt_pin_volt",
@@ -1412,10 +1607,16 @@ mod tests {
     fn texts_are_non_empty_and_snippets_start_with_name() {
         for command in COMMANDS {
             assert!(!command.synopsis.is_empty() && !command.description.is_empty());
+            assert!(
+                command
+                    .arguments
+                    .iter()
+                    .all(|argument| !argument.description.is_empty())
+            );
             if let Some(snippet) = command.snippet {
                 let starts_with_spelling = std::iter::once(command.name)
                     .chain(command.aliases.iter().copied())
-                    .any(|spelling| snippet.starts_with(spelling));
+                    .any(|spelling| snippet.to_ascii_lowercase().starts_with(spelling));
                 assert!(starts_with_spelling, "{}", command.name);
             }
         }

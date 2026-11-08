@@ -287,8 +287,8 @@ fn full_session_utf16() {
     assert!(
         items.iter().any(|item| item["label"]
             .as_str()
-            .is_some_and(|label| label.trim_start_matches('.') == "tran")),
-        "no .tran completion in {} items",
+            .is_some_and(|label| label.trim_start_matches('.') == "TRAN")),
+        "no .TRAN completion in {} items",
         items.len()
     );
     client.change(&uri, 3, &text);

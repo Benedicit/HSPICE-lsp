@@ -84,7 +84,7 @@
         "hspice.diagnostics.unknownOptions": {
           "type": "boolean",
           "default": true,
-          "description": "Report unknown .option names."
+          "description": "Report unknown .option names and .MOSRA parameters."
         },
         "hspice.diagnostics.megSuffix": {
           "type": "boolean",
@@ -100,6 +100,11 @@
           "type": "boolean",
           "default": true,
           "description": "Show argument names on source instances."
+        },
+        "hspice.folding.comments": {
+          "type": "boolean",
+          "default": false,
+          "description": "Fold runs of consecutive comment lines."
         },
         "hspice.workspaceScan.enabled": {
           "type": "boolean",

@@ -244,8 +244,8 @@ export default grammar({
 
     _number_literal: _ => /(\d+\.?\d*|\.\d+)([eEdD][+-]?\d+)?[a-zA-Z]*/,
 
-    // Keys whose value is a file path rather than an expression; also usable as plain words.
-    file_key: _ => /(file|rlgcfile|tablefile|pwlfile|filename|search)/i,
+    // Keys whose value is a file path or literal string rather than an expression; also usable as plain words.
+    file_key: _ => /(file|rlgcfile|tablefile|pwlfile|filename|search|aginginst)/i,
 
     _word: $ => choice($.word, alias($.file_key, $.word)),
 

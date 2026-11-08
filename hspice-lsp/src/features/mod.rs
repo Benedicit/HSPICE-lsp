@@ -14,9 +14,25 @@ pub mod symbols;
 use ls_types::{Location, Position, Range, Uri};
 
 use crate::analysis::symbols::{Origin, Symbol};
+use crate::lang::elements::ParamSpec;
 use crate::state::document::Document;
 use crate::state::workspace::Workspace;
 use crate::syntax::ast::TextRange;
+
+/// Renders documented arguments as a Markdown list preceded by a blank line; empty if there are none.
+///
+/// # Arguments
+/// * `arguments` - arguments with their meaning
+pub fn argument_docs(arguments: &[ParamSpec]) -> String {
+    if arguments.is_empty() {
+        return String::new();
+    }
+    let items: Vec<String> = arguments
+        .iter()
+        .map(|argument| format!("- `{}` \u{2014} {}", argument.name, argument.description))
+        .collect();
+    format!("\n\n**Arguments**\n{}", items.join("\n"))
+}
 
 /// Converts a byte range of a document into an LSP range.
 ///

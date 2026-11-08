@@ -512,9 +512,9 @@ pub static ANALYSIS_KEYWORDS: &[KeywordSpec] = &[
     },
     KeywordSpec {
         name: "runlvl",
-        aliases: &[],
+        aliases: &["run_lvl"],
         takes_value: true,
-        description: "Run level for the analysis",
+        description: "Speed/accuracy level per time window: RUNLVL=(t1 lvl1 t2 lvl2 ...)",
     },
 ];
 

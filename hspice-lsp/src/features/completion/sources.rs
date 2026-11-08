@@ -8,12 +8,13 @@ use ls_types::CompletionItemKind;
 use super::candidate::{Candidate, escape_snippet};
 use crate::analysis::includes::{read_source, resolve_include_path};
 use crate::analysis::symbols::{ScopeId, Symbol, SymbolDetail, SymbolKind};
-use crate::features::definition_text;
+use crate::features::{argument_docs, definition_text};
 use crate::lang::commands::COMMANDS;
 use crate::lang::elements::{ELEMENTS, ElementSpec, SOURCE_FUNCTIONS};
 use crate::lang::functions::{FUNCTIONS, SPECIAL_VARIABLES};
 use crate::lang::measure::{ANALYSIS_KEYWORDS, ANALYSIS_TYPES, MEASURE_KEYWORDS};
 use crate::lang::models::{MODEL_TYPES, ModelParamSpec};
+use crate::lang::mosra::MOSRA_PARAMS;
 use crate::lang::options::{OPTIONS, OptionValue};
 use crate::lang::output_vars::OUTPUT_VARS;
 use crate::lang::{KeywordSpec, Status, Usage};
@@ -78,18 +79,20 @@ pub fn commands() -> Vec<Candidate> {
                 .collect::<Vec<_>>()
                 .join(" ");
             let mut documentation = syntax_documentation(spec.synopsis, spec.description);
+            documentation.push_str(&argument_docs(spec.arguments));
             if spec.status == Status::Obsolete {
                 documentation.push_str("\n\n_Obsolete._");
             }
             if !spec.aliases.is_empty() {
                 documentation.push_str(&format!("\n\nAliases: `{}`", spec.aliases.join("`, `")));
             }
-            let candidate = Candidate::new(spec.name, CompletionItemKind::KEYWORD)
-                .detail(first_line(spec.synopsis))
-                .documentation(documentation)
-                .filter(filter)
-                .sort(usage_sort(spec.usage, spec.status))
-                .deprecated(spec.status == Status::Obsolete);
+            let candidate =
+                Candidate::new(spec.name.to_ascii_uppercase(), CompletionItemKind::KEYWORD)
+                    .detail(first_line(spec.synopsis))
+                    .documentation(documentation)
+                    .filter(filter)
+                    .sort(usage_sort(spec.usage, spec.status))
+                    .deprecated(spec.status == Status::Obsolete);
             match spec.snippet {
                 Some(snippet) => candidate.snippet(snippet),
                 None => candidate,
@@ -255,10 +258,13 @@ pub fn element_params(spec: &ElementSpec) -> Vec<Candidate> {
     spec.params
         .iter()
         .map(|param| {
-            Candidate::new(format!("{}=", param.name), CompletionItemKind::PROPERTY)
-                .documentation(param.description)
-                .detail(param.description)
-                .sort("6")
+            Candidate::new(
+                format!("{}=", param.name.to_ascii_uppercase()),
+                CompletionItemKind::PROPERTY,
+            )
+            .documentation(param.description)
+            .detail(param.description)
+            .sort("6")
         })
         .collect()
 }
@@ -297,7 +303,7 @@ pub fn subckt_params(env: Env, subckt: &str) -> Vec<Candidate> {
     params
         .into_iter()
         .chain(std::iter::once(
-            Candidate::new("m=", CompletionItemKind::PROPERTY)
+            Candidate::new("M=", CompletionItemKind::PROPERTY)
                 .detail("parallel multiplier")
                 .sort("1"),
         ))
@@ -307,22 +313,26 @@ pub fn subckt_params(env: Env, subckt: &str) -> Vec<Candidate> {
 /// Returns the keywords of independent sources (`DC`, `AC` and the transient functions) as snippets.
 pub fn source_keywords() -> Vec<Candidate> {
     let functions = SOURCE_FUNCTIONS.iter().map(|spec| {
-        let arguments = spec
+        let names: Vec<&str> = spec
             .arguments
+            .iter()
+            .map(|argument| argument.name)
+            .collect();
+        let arguments = names
             .iter()
             .enumerate()
             .map(|(index, name)| format!("${{{}:{name}}}", index + 1))
             .collect::<Vec<_>>()
             .join(" ");
-        let signature = format!(
-            "{}({})",
-            spec.name.to_ascii_uppercase(),
-            spec.arguments.join(" ")
-        );
+        let signature = format!("{}({})", spec.name.to_ascii_uppercase(), names.join(" "));
         Candidate::new(spec.name.to_ascii_uppercase(), CompletionItemKind::FUNCTION)
             .snippet(format!("{}({arguments})", spec.name.to_ascii_uppercase()))
             .detail(signature)
-            .documentation(spec.description)
+            .documentation(format!(
+                "{}{}",
+                spec.description,
+                argument_docs(spec.arguments)
+            ))
             .filter(
                 std::iter::once(spec.name)
                     .chain(spec.aliases.iter().copied())
@@ -459,7 +469,8 @@ pub fn options(prefix_given: bool) -> Vec<Candidate> {
         .filter(|spec| spec.status != Status::Foreign)
         .filter(|spec| prefix_given || spec.usage == Usage::Common)
         .map(|spec| {
-            let candidate = Candidate::new(spec.name, CompletionItemKind::PROPERTY)
+            let label = spec.name.to_ascii_uppercase();
+            let candidate = Candidate::new(label.clone(), CompletionItemKind::PROPERTY)
                 .detail(spec.default.map_or_else(
                     || "option".to_string(),
                     |default| format!("default {default}"),
@@ -474,7 +485,7 @@ pub fn options(prefix_given: bool) -> Vec<Candidate> {
                 .sort(usage_sort(spec.usage, spec.status))
                 .deprecated(spec.status == Status::Obsolete);
             match spec.value {
-                OptionValue::Value => candidate.snippet(format!("{}=${{1}}", spec.name)),
+                OptionValue::Value => candidate.snippet(format!("{label}=${{1}}")),
                 OptionValue::Flag | OptionValue::FlagOrValue => candidate,
             }
         })
@@ -487,7 +498,7 @@ pub fn model_types() -> Vec<Candidate> {
         .iter()
         .filter(|spec| spec.status != Status::Foreign)
         .map(|spec| {
-            Candidate::new(spec.name, CompletionItemKind::CLASS)
+            Candidate::new(spec.name.to_ascii_uppercase(), CompletionItemKind::CLASS)
                 .detail(spec.description)
                 .sort(if spec.status == Status::Obsolete {
                     "8"
@@ -509,13 +520,16 @@ pub fn model_params(params: &[ModelParamSpec], used: &HashSet<String>) -> Vec<Ca
         .iter()
         .filter(|param| !used.contains(param.name))
         .map(|param| {
-            Candidate::new(format!("{}=", param.name), CompletionItemKind::PROPERTY)
-                .detail(param.default.map_or_else(
-                    || param.description.to_string(),
-                    |default| format!("default {default}"),
-                ))
-                .documentation(param.description)
-                .sort("1")
+            Candidate::new(
+                format!("{}=", param.name.to_ascii_uppercase()),
+                CompletionItemKind::PROPERTY,
+            )
+            .detail(param.default.map_or_else(
+                || param.description.to_string(),
+                |default| format!("default {default}"),
+            ))
+            .documentation(param.description)
+            .sort("1")
         })
         .collect()
 }
@@ -530,10 +544,11 @@ pub fn keywords(table: &[KeywordSpec], kind: CompletionItemKind, sort: &str) -> 
     table
         .iter()
         .map(|spec| {
+            let name = spec.name.to_ascii_uppercase();
             let label = if spec.takes_value {
-                format!("{}=", spec.name)
+                format!("{name}=")
             } else {
-                spec.name.to_string()
+                name
             };
             Candidate::new(label, kind)
                 .detail(spec.description)
@@ -559,6 +574,11 @@ pub fn analysis_types() -> Vec<Candidate> {
     keywords(ANALYSIS_TYPES, CompletionItemKind::ENUM_MEMBER, "0")
 }
 
+/// Returns the `.mosra` parameters (`RELTOTALTIME=`, `RELSTEP=` …).
+pub fn mosra_params() -> Vec<Candidate> {
+    keywords(MOSRA_PARAMS, CompletionItemKind::PROPERTY, "1")
+}
+
 /// Returns the `.meas` keywords (`trig`, `targ`, `val=`, `rise=` …).
 pub fn measure_keywords() -> Vec<Candidate> {
     keywords(MEASURE_KEYWORDS, CompletionItemKind::KEYWORD, "1")
@@ -569,8 +589,9 @@ pub fn output_variables() -> Vec<Candidate> {
     OUTPUT_VARS
         .iter()
         .map(|spec| {
-            Candidate::new(format!("{}(", spec.name), CompletionItemKind::FUNCTION)
-                .snippet(format!("{}(${{1}})", spec.name))
+            let name = spec.name.to_ascii_uppercase();
+            Candidate::new(format!("{name}("), CompletionItemKind::FUNCTION)
+                .snippet(format!("{name}(${{1}})"))
                 .detail(spec.signature)
                 .documentation(spec.description)
                 .filter(

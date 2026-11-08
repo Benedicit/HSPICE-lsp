@@ -5,6 +5,7 @@ local M = {}
 ---@field diagnostics? { floatingNodes?: boolean, unusedParams?: boolean, unknownOptions?: boolean, megSuffix?: boolean }
 ---@field inlayHints? { ports?: boolean, sourceArgs?: boolean }
 ---@field workspaceScan? { enabled?: boolean, maxFiles?: integer }
+---@field folding? { comments?: boolean }
 ---@field maxIncludeFileSizeMb? integer
 
 ---@class hspice.Options
@@ -20,6 +21,7 @@ M.defaults = {
     diagnostics = { floatingNodes = true, unusedParams = true, unknownOptions = true, megSuffix = true },
     inlayHints = { ports = true, sourceArgs = true },
     workspaceScan = { enabled = true, maxFiles = 500 },
+    folding = { comments = false },
     maxIncludeFileSizeMb = 64,
   },
   inlay_hints = true,

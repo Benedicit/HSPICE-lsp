@@ -571,3 +571,76 @@ fn value_lists_and_wildcards_are_valid() {
     );
     assert_eq!(run(&text), vec![]);
 }
+
+#[test]
+fn renamed_and_newly_listed_options_are_known() {
+    let text = format!("{BASE}.option run_lvl=3 runlvl=3 absin=1 hb_maxiter=100 sim_la=pact\n");
+    assert!(!has(&text, "unknown-option"));
+}
+
+#[test]
+fn mosra_parameters_are_checked() {
+    let full = format!(
+        "{BASE}.param tlife=6.3e8\n.mosra reltotaltime=tlife relstep=6.3e7 mosralife=delvth0 aginginst=\"x1.*\"\n"
+    );
+    assert_eq!(run(&full), vec![]);
+    assert!(has(&format!("{BASE}.mosra relstep=1\n"), "mosra-args"));
+    assert!(has(
+        &format!("{BASE}.mosra reltotaltime=1 bogus=1\n"),
+        "unknown-mosra-param"
+    ));
+    assert!(has(
+        &format!("{BASE}.mosra reltotaltime=nosuch\n"),
+        "undefined-param"
+    ));
+}
+
+#[test]
+fn output_variable_names_must_exist() {
+    assert!(has(&format!("{BASE}.print v(nosuch)\n"), "undefined-node"));
+    assert!(has(
+        &format!("{BASE}.probe tran i(r9)\n"),
+        "undefined-element"
+    ));
+    assert!(has(&format!("{BASE}.ic v(nosuch)=0\n"), "undefined-node"));
+    assert!(has(
+        &format!("{BASE}.meas tran m avg v(nosuch)\n"),
+        "undefined-node"
+    ));
+    assert!(has(
+        &format!("{BASE}.print par('v(nosuch)*2')\n"),
+        "undefined-node"
+    ));
+    let valid =
+        format!("{BASE}.global vdd\n.print v(a) v(a,0) i(r1) v1(r1) v(vdd) v(gnd) v(*) i(*)\n");
+    assert!(only(&valid, &["floating-node"]));
+}
+
+#[test]
+fn hierarchical_output_names_follow_local_subcircuits() {
+    let text = "t\n.subckt s p\nR1 p q 1\nR2 q 0 1\n.ends\nV1 a 0 1\nX1 a s\n";
+    let codes = |line: &str| {
+        run(&format!("{text}{line}\n"))
+            .into_iter()
+            .map(|(code, _)| code)
+            .filter(|code| code.starts_with("undefined-"))
+            .collect::<Vec<_>>()
+    };
+    assert!(codes(".print v(x1.q) v(x1.p) i(x1.r1)").is_empty());
+    assert_eq!(codes(".print v(x1.nosuch)"), vec!["undefined-node"]);
+    assert_eq!(codes(".print i(x1.r9)"), vec!["undefined-element"]);
+    assert_eq!(codes(".print v(x9.q)"), vec!["undefined-node"]);
+    let external = "t\nV1 a 0 1\nX1 a b ext\n.print v(x1.anything)\n";
+    assert!(!has(external, "undefined-node"));
+}
+
+#[test]
+fn output_names_are_not_checked_in_include_files() {
+    let found = run_with(
+        "R1 a 0 1k\n.print v(nosuch)\n",
+        false,
+        true,
+        &DiagnosticSettings::default(),
+    );
+    assert!(found.iter().all(|(code, _)| *code != "undefined-node"));
+}

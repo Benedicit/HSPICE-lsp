@@ -397,3 +397,23 @@ Subcircuit with parenthesised ports
       (number)))
   (ends_command
     (command_name)))
+
+============================================================
+MOSRA with quoted instance pattern
+============================================================
+.mosra reltotaltime=6.3e+8 relstep=6.3e+7 aginginst="x1.*"
+
+------------------------------------------------------------
+
+(source_file
+  (generic_command
+    (command_name)
+    (assignment
+      (word)
+      (number))
+    (assignment
+      (word)
+      (number))
+    (file_assignment
+      (word)
+      (string))))

@@ -19,7 +19,7 @@ pub enum ReferenceKind {
     Inductors,
 }
 
-/// An instance parameter accepted as `key=value` on an element line.
+/// A named argument or `key=value` parameter with a one-line description.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ParamSpec {
     /// Lowercase parameter name.
@@ -62,8 +62,8 @@ pub struct SourceFunctionSpec {
     pub name: &'static str,
     /// Alternative spellings, e.g. `pu`.
     pub aliases: &'static [&'static str],
-    /// Positional argument names in order, e.g. `["v1", "v2", "td", "tr", "tf", "pw", "per"]`.
-    pub arguments: &'static [&'static str],
+    /// Positional arguments in order, e.g. `v1 v2 td tr tf pw per` for `PULSE`.
+    pub arguments: &'static [ParamSpec],
     /// Number of required positional arguments.
     pub required: usize,
     /// One-line description.
@@ -528,7 +528,7 @@ pub static ELEMENTS: &[ElementSpec] = &[
             param!("m", "Parallel multiplier"),
         ],
         keywords: &[],
-        snippet: "B${1:1} ${2:nodes} file='${3:file}' model='${4:model}'",
+        snippet: "B${1:1} ${2:nodes} FILE='${3:file}' MODEL='${4:model}'",
     },
     ElementSpec {
         letter: 'P',
@@ -546,7 +546,7 @@ pub static ELEMENTS: &[ElementSpec] = &[
             param!("ac", "AC magnitude and phase"),
         ],
         keywords: &["dc", "ac"],
-        snippet: "P${1:1} ${2:p} ${3:n} port=${4:1} z0=${5:50}",
+        snippet: "P${1:1} ${2:p} ${3:n} PORT=${4:1} Z0=${5:50}",
     },
     ElementSpec {
         letter: 'S',
@@ -564,7 +564,7 @@ pub static ELEMENTS: &[ElementSpec] = &[
             param!("z0", "Reference impedance"),
         ],
         keywords: &[],
-        snippet: "S${1:1} ${2:nodes} ${3:ref} mname=${4:model}",
+        snippet: "S${1:1} ${2:nodes} ${3:ref} MNAME=${4:model}",
     },
     ElementSpec {
         letter: 'T',
@@ -631,63 +631,264 @@ pub static SOURCE_FUNCTIONS: &[SourceFunctionSpec] = &[
     SourceFunctionSpec {
         name: "pulse",
         aliases: &["pu"],
-        arguments: &["v1", "v2", "td", "tr", "tf", "pw", "per"],
+        arguments: &[
+            ParamSpec {
+                name: "v1",
+                description: "Initial value",
+            },
+            ParamSpec {
+                name: "v2",
+                description: "Pulsed value",
+            },
+            ParamSpec {
+                name: "td",
+                description: "Delay before the first edge (default 0)",
+            },
+            ParamSpec {
+                name: "tr",
+                description: "Rise time (default TSTEP)",
+            },
+            ParamSpec {
+                name: "tf",
+                description: "Fall time (default TSTEP)",
+            },
+            ParamSpec {
+                name: "pw",
+                description: "Pulse width at v2 (default TSTOP)",
+            },
+            ParamSpec {
+                name: "per",
+                description: "Period (default TSTOP)",
+            },
+        ],
         required: 2,
         description: "Pulse train: v1 v2 [td [tr [tf [pw [per]]]]] [PERJITTER= [SEED=]].",
     },
     SourceFunctionSpec {
         name: "sin",
         aliases: &[],
-        arguments: &["vo", "va", "freq", "td", "q", "j"],
+        arguments: &[
+            ParamSpec {
+                name: "vo",
+                description: "Offset value",
+            },
+            ParamSpec {
+                name: "va",
+                description: "Amplitude",
+            },
+            ParamSpec {
+                name: "freq",
+                description: "Frequency in Hz (default 1/TSTOP)",
+            },
+            ParamSpec {
+                name: "td",
+                description: "Delay before the sine starts (default 0)",
+            },
+            ParamSpec {
+                name: "q",
+                description: "Damping factor in 1/s (default 0)",
+            },
+            ParamSpec {
+                name: "j",
+                description: "Phase delay in degrees (default 0)",
+            },
+        ],
         required: 2,
         description: "Damped sinusoid: vo va [freq [td [q [j]]]].",
     },
     SourceFunctionSpec {
         name: "exp",
         aliases: &[],
-        arguments: &["v1", "v2", "td1", "t1", "td2", "t2"],
+        arguments: &[
+            ParamSpec {
+                name: "v1",
+                description: "Initial value",
+            },
+            ParamSpec {
+                name: "v2",
+                description: "Pulsed value",
+            },
+            ParamSpec {
+                name: "td1",
+                description: "Rise delay (default 0)",
+            },
+            ParamSpec {
+                name: "t1",
+                description: "Rise time constant (default TSTEP)",
+            },
+            ParamSpec {
+                name: "td2",
+                description: "Fall delay (default td1+TSTEP)",
+            },
+            ParamSpec {
+                name: "t2",
+                description: "Fall time constant (default TSTEP)",
+            },
+        ],
         required: 2,
         description: "Exponential rise and decay: v1 v2 [td1 [t1 [td2 [t2]]]].",
     },
     SourceFunctionSpec {
         name: "pwl",
         aliases: &[],
-        arguments: &["t1", "v1", "t2", "v2"],
+        arguments: &[
+            ParamSpec {
+                name: "t1",
+                description: "First time point",
+            },
+            ParamSpec {
+                name: "v1",
+                description: "Value at t1",
+            },
+            ParamSpec {
+                name: "t2",
+                description: "Next time point",
+            },
+            ParamSpec {
+                name: "v2",
+                description: "Value at t2",
+            },
+        ],
         required: 2,
         description: "Piecewise linear time/value pairs; also R[=repeat], TD=delay, PWLFILE=.",
     },
     SourceFunctionSpec {
         name: "pl",
         aliases: &[],
-        arguments: &["v1", "t1", "v2", "t2"],
+        arguments: &[
+            ParamSpec {
+                name: "v1",
+                description: "First value",
+            },
+            ParamSpec {
+                name: "t1",
+                description: "Time of v1",
+            },
+            ParamSpec {
+                name: "v2",
+                description: "Next value",
+            },
+            ParamSpec {
+                name: "t2",
+                description: "Time of v2",
+            },
+        ],
         required: 2,
         description: "Piecewise linear value/time pairs.",
     },
     SourceFunctionSpec {
         name: "pwlz",
         aliases: &[],
-        arguments: &["t1", "v1", "t2", "v2"],
+        arguments: &[
+            ParamSpec {
+                name: "t1",
+                description: "First time point",
+            },
+            ParamSpec {
+                name: "v1",
+                description: "Value at t1",
+            },
+            ParamSpec {
+                name: "t2",
+                description: "Next time point",
+            },
+            ParamSpec {
+                name: "v2",
+                description: "Value at t2",
+            },
+        ],
         required: 2,
         description: "Piecewise linear variant with zero-order hold (see manual).",
     },
     SourceFunctionSpec {
         name: "sffm",
         aliases: &[],
-        arguments: &["vo", "va", "fc", "mdi", "fs"],
+        arguments: &[
+            ParamSpec {
+                name: "vo",
+                description: "Offset value",
+            },
+            ParamSpec {
+                name: "va",
+                description: "Amplitude",
+            },
+            ParamSpec {
+                name: "fc",
+                description: "Carrier frequency in Hz (default 1/TSTOP)",
+            },
+            ParamSpec {
+                name: "mdi",
+                description: "Modulation index (default 0)",
+            },
+            ParamSpec {
+                name: "fs",
+                description: "Signal (modulating) frequency in Hz (default 1/TSTOP)",
+            },
+        ],
         required: 2,
         description: "Single-frequency FM: vo va [fc [mdi [fs]]].",
     },
     SourceFunctionSpec {
         name: "am",
         aliases: &[],
-        arguments: &["sa", "oc", "fm", "fc", "td"],
+        arguments: &[
+            ParamSpec {
+                name: "sa",
+                description: "Signal amplitude",
+            },
+            ParamSpec {
+                name: "oc",
+                description: "Offset constant",
+            },
+            ParamSpec {
+                name: "fm",
+                description: "Modulation frequency in Hz",
+            },
+            ParamSpec {
+                name: "fc",
+                description: "Carrier frequency in Hz",
+            },
+            ParamSpec {
+                name: "td",
+                description: "Delay (default 0)",
+            },
+        ],
         required: 4,
         description: "Amplitude modulation: sa oc fm fc [td].",
     },
     SourceFunctionSpec {
         name: "pat",
         aliases: &[],
-        arguments: &["vhi", "vlo", "td", "tr", "tf", "tsample", "data"],
+        arguments: &[
+            ParamSpec {
+                name: "vhi",
+                description: "High value of a 1 bit",
+            },
+            ParamSpec {
+                name: "vlo",
+                description: "Low value of a 0 bit",
+            },
+            ParamSpec {
+                name: "td",
+                description: "Delay before the pattern starts",
+            },
+            ParamSpec {
+                name: "tr",
+                description: "Rise time",
+            },
+            ParamSpec {
+                name: "tf",
+                description: "Fall time",
+            },
+            ParamSpec {
+                name: "tsample",
+                description: "Duration of one bit",
+            },
+            ParamSpec {
+                name: "data",
+                description: "Bit string such as b1010, or a .PAT pattern name",
+            },
+        ],
         required: 7,
         description: "Bit pattern: vhi vlo td tr tf tsample data [RB=] [R=] [ENCODE=] [RD_INIT=].",
     },
@@ -695,7 +896,38 @@ pub static SOURCE_FUNCTIONS: &[SourceFunctionSpec] = &[
         name: "lfsr",
         aliases: &[],
         arguments: &[
-            "vlow", "vhigh", "tdelay", "trise", "tfall", "rate", "seed", "taps",
+            ParamSpec {
+                name: "vlow",
+                description: "Low value",
+            },
+            ParamSpec {
+                name: "vhigh",
+                description: "High value",
+            },
+            ParamSpec {
+                name: "tdelay",
+                description: "Delay before the sequence starts",
+            },
+            ParamSpec {
+                name: "trise",
+                description: "Rise time",
+            },
+            ParamSpec {
+                name: "tfall",
+                description: "Fall time",
+            },
+            ParamSpec {
+                name: "rate",
+                description: "Bit rate",
+            },
+            ParamSpec {
+                name: "seed",
+                description: "Initial register value",
+            },
+            ParamSpec {
+                name: "taps",
+                description: "Feedback tap positions",
+            },
         ],
         required: 7,
         description: "Pseudo-random bit sequence: vlow vhigh tdelay trise tfall rate seed [taps] [rout=].",
@@ -788,6 +1020,12 @@ mod tests {
                 function.name
             );
             assert!(!function.description.is_empty());
+            assert!(
+                function
+                    .arguments
+                    .iter()
+                    .all(|argument| !argument.description.is_empty())
+            );
         }
     }
 

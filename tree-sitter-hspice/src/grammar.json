@@ -1303,7 +1303,7 @@
     },
     "file_key": {
       "type": "PATTERN",
-      "value": "(file|rlgcfile|tablefile|pwlfile|filename|search)",
+      "value": "(file|rlgcfile|tablefile|pwlfile|filename|search|aginginst)",
       "flags": "i"
     },
     "_word": {

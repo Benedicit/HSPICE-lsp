@@ -6,7 +6,7 @@ use ls_types::{
 };
 
 use super::completion::line_context::{Frame, FrameKind, LineScan, scan};
-use super::to_offset;
+use super::{argument_docs, to_offset};
 use crate::analysis::symbols::{Symbol, SymbolDetail, SymbolKind};
 use crate::lang::commands::find_command;
 use crate::lang::elements::{ElementSpec, find_element, find_source_function};
@@ -89,6 +89,25 @@ fn signature(label: &str, parameters: &[String], documentation: &str) -> Signatu
     }
 }
 
+/// Attaches a description to each parameter of a signature, in order.
+///
+/// # Arguments
+/// * `info` - signature whose parameters were located by `signature`
+/// * `descriptions` - one description per parameter
+fn with_parameter_docs(info: SignatureInformation, descriptions: &[&str]) -> SignatureInformation {
+    let parameters = info.parameters.map(|parameters| {
+        parameters
+            .into_iter()
+            .zip(descriptions)
+            .map(|(parameter, description)| ParameterInformation {
+                documentation: Some(Documentation::String((*description).to_string())),
+                ..parameter
+            })
+            .collect()
+    });
+    SignatureInformation { parameters, ..info }
+}
+
 /// Returns the innermost named parenthesis frame at the cursor.
 ///
 /// # Arguments
@@ -117,14 +136,22 @@ fn call_signature(document: &Document, scan: &LineScan) -> Option<SignatureHelp>
             let arguments: Vec<String> = spec
                 .arguments
                 .iter()
-                .map(|argument| (*argument).to_string())
+                .map(|argument| argument.name.to_string())
                 .collect();
             let label = format!(
                 "{}({})",
                 spec.name.to_ascii_uppercase(),
                 arguments.join(" ")
             );
-            signature(&label, &arguments, spec.description)
+            let descriptions: Vec<&str> = spec
+                .arguments
+                .iter()
+                .map(|argument| argument.description)
+                .collect();
+            with_parameter_docs(
+                signature(&label, &arguments, spec.description),
+                &descriptions,
+            )
         });
     let user = || user_function_signature(document, scan, &key);
     let builtin = || {
@@ -201,7 +228,10 @@ fn command_signature(scan: &LineScan) -> Option<SignatureHelp> {
     let signatures: Vec<SignatureInformation> = spec
         .synopsis
         .lines()
-        .map(|line| signature(line, &[], spec.description))
+        .map(|line| {
+            let documentation = format!("{}{}", spec.description, argument_docs(spec.arguments));
+            signature(line, &[], &documentation)
+        })
         .collect();
     Some(SignatureHelp {
         signatures,
@@ -389,6 +419,13 @@ mod tests {
         assert_eq!(first.active_parameter, Some(0));
         let typing = help_of("* t\nVin a 0 pulse(0 1|").expect("help");
         assert_eq!(typing.active_parameter, Some(1));
+        let params = result.signatures[0].parameters.clone().unwrap_or_default();
+        assert_eq!(
+            params[2].documentation,
+            Some(Documentation::String(
+                "Delay before the first edge (default 0)".to_string()
+            ))
+        );
     }
 
     #[test]

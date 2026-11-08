@@ -462,6 +462,20 @@ pub fn find_output_var(name: &str) -> Option<&'static OutputVarSpec> {
     })
 }
 
+/// Returns what the argument of an output variable names; `Vk(elem)` names an element terminal.
+///
+/// # Arguments
+/// * `name` - function name as written, e.g. `v1` or `VDB`
+pub fn output_argument(name: &str) -> Option<OutputArgKind> {
+    let spec = find_output_var(name)?;
+    let terminal_voltage = spec.name == "v" && name.ends_with(|c: char| c.is_ascii_digit());
+    Some(if terminal_voltage {
+        OutputArgKind::Element
+    } else {
+        spec.argument
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -485,6 +499,9 @@ mod tests {
         assert_eq!(kind("par"), Some(OutputArgKind::Expression));
         assert_eq!(kind("power"), Some(OutputArgKind::Other));
         assert_eq!(kind("p"), Some(OutputArgKind::Element));
+        assert_eq!(output_argument("V"), Some(OutputArgKind::Nodes));
+        assert_eq!(output_argument("v1"), Some(OutputArgKind::Element));
+        assert_eq!(output_argument("i2"), Some(OutputArgKind::Element));
     }
 
     #[test]

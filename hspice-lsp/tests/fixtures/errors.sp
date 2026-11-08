@@ -113,6 +113,14 @@ Rdup4 a b 4k
 * case: unknown-command
 .foo $ expect: unknown-command
 
+* case: undefined-node and undefined-element in output variables
+.probe v(nosuch) $ expect: undefined-node
+.probe i(rnosuch) $ expect: undefined-element
+
+* case: mosra-args and unknown-mosra-param
+.mosra relstep=1 $ expect: mosra-args
+.mosra reltotaltime=1 bogusparam=1 $ expect: unknown-mosra-param
+
 * case: bad-port (ground in port list)
 .subckt bp a 0 $ expect: bad-port
 Rbp1 a 0 1k

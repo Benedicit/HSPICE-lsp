@@ -62,12 +62,12 @@ exports.run = async function run() {
   }
 
   const untitled = await vscode.workspace.openTextDocument({ language: "hspice", content: "* t\n.tr" });
-  await waitFor("completion offers .tran", async () => {
+  await waitFor("completion offers .TRAN", async () => {
     const list = await vscode.commands.executeCommand(
       "vscode.executeCompletionItemProvider",
       untitled.uri,
       new vscode.Position(1, 3),
     );
-    return list.items.some((item) => (item.label.label ?? item.label) === ".tran");
+    return list.items.some((item) => (item.label.label ?? item.label) === ".TRAN");
   });
 };

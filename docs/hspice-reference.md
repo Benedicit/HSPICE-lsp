@@ -299,12 +299,18 @@ RF analyses (accept): `.HB .HBAC .HBXF .HBLIN .HBLSP .HBNOISE .HBOSC .SN .SNAC .
 | `.MALIAS` | | `.MALIAS model=alias1 <alias2 …>` |
 | `.APPENDMODEL` | | `.APPENDMODEL Src kw1 Dest kw2` |
 | `.VARIATION` [c] | | block, see §10 |
-| `.MOSRA` | | `.MOSRA RelTotalTime=t <RelStartTime=> …` |
+| `.MOSRA` | | `.MOSRA RelTotalTime=t <RelStartTime=t> <DEC=n\|LIN=n\|RelStep=t> <RelMode=0\|1\|2> <SimMode=0\|1\|2\|3> …` (see below) |
 | `.MOSRA_SUBCKT_PIN_VOLT` | | `.MOSRA_SUBCKT_PIN_VOLT subckt=n1,..` |
 | `.IVTH` | | `.IVTH model Ivth0=v DW=v DL=v VDSMIN=v` |
 | `.FLAT` | | `.FLAT <subckt> elem` |
 | `.CFL_PROTOTYPE` | | `.CFL_PROTOTYPE fn(type,..)` |
 | `.MODULE` | | `.MODULE label` (closing `.ENDMODULE` UNVERIFIED) |
+
+`.MOSRA` keys [V] (E-2010.12, K-2015.06): `RelTotalTime` (required), `RelStartTime`, `DEC`, `LIN`, `RelStep`,
+`RelMode` (0 HCI+BTI, 1 HCI, 2 BTI), `SimMode` (0 pre-stress, 1 post-stress, 2 both, 3 continual through
+`.ALTER`), `AgingStart`, `AgingStop`, `AgingPeriod`, `AgingWidth`, `AgingInst="pattern"`, `HciThreshold`,
+`NbtiThreshold`, `Integmod`, `Xpolatemod`, `Tsample1`, `Tsample2`, `Agethreshold`, `MosraLife`, `DegF`,
+`DegFN`, `DegFP`.
 
 ### IBIS / field solver (accept)
 `.IBIS 'name' file='f' component='c'`, `.EBD name file= component=`, `.ICM name file= model=`,
@@ -425,8 +431,10 @@ Binned models: `nch.1 … nch.N` with LMIN/LMAX/WMIN/WMAX; elements reference th
 | ACOUT | 0/1 | 0 | AC difference calculation |
 | VFLOOR | num | | Minimum printed voltage |
 | INTERP | flag | 0 | Output only at tstep multiples |
-| POSTLVL / POSTTOP | int | | Limit waveform node depth |
-| WARN / NOWARN | flag | | Warning control |
+| POSTLVL | int | | Write only nodes at hierarchy level n |
+| POSTTOP | int | | Write only the top n hierarchy levels |
+| WARN | 0/1 | 1 | SOA voltage warnings |
+| NOWARN | flag/0/1 | 0 | Suppress conflicting-parameter warnings |
 | WARNLIMIT / WARNLIM | int | | Limit repeated warnings |
 | MESSAGE_LIMIT | 'idx:n' | | Per-message limit |
 | LIMPTS | int | 2001 | Max AC print points |
@@ -452,7 +460,7 @@ Binned models: `nch.1 … nch.N` with LMIN/LMAX/WMIN/WMAX; elements reference th
 | MACMOD | 0/1/2 | | M element may call subckt (1) / X may map to model (2) |
 | GENK / KLIM | | | Mutual inductors |
 | EM_RECOVERY | num | 1 | EM recovery factor |
-| RUNLVL [C] | 0–6 | 3 | Speed/accuracy level |
+| RUNLVL [C] / RUN_LVL | 0–6 | 3 | Speed/accuracy level (spelling RUN_LVL UNVERIFIED, reported for newer releases) |
 | ACCURATE [C] | flag | 0 | Accurate timestep control |
 | FAST | flag | 0 | Faster, less accurate |
 | METHOD [C] | GEAR/TRAP/BDF | TRAP | Integration method |
@@ -462,7 +470,8 @@ Binned models: `nch.1 … nch.N` with LMIN/LMAX/WMIN/WMAX; elements reference th
 | LVLTIM | 1–4 | 1 | Timestep algorithm |
 | DVDT | 0–4 | 4 | Timestep from dV/dt |
 | RELTOL [C] | num | 1e-3 | Relative tolerance |
-| ABSTOL [C] / ABSI | A | 1e-9 | Absolute current tolerance |
+| ABSTOL [C] | A | 1e-9 | Absolute current tolerance |
+| ABSI | A | 1e-9 | Absolute current tolerance of diodes, BJTs and JFETs |
 | VNTOL [C] / ABSV | V | 50u | Absolute voltage tolerance |
 | CHGTOL [C] | C | 1e-15 | Charge tolerance |
 | RELV | num | 1e-3 | Relative voltage tolerance |
@@ -515,7 +524,9 @@ Binned models: `nch.1 … nch.N` with LMIN/LMAX/WMIN/WMAX; elements reference th
 Obsolete options (deprecation hint): ACCT ALT999 ALT9999 BKPSIZ CDS CO H9007 MEASSORT MENTOR MODSRH PIVREF NOPAGE
 PIVREL PLIM SDA SPICE SIM_LA_MINMODE ZUKEN.
 
-Options are numerous; unknown options are only a hint.
+Options are numerous; unknown options are only a hint. This table lists the common ones; the complete list
+(every option of the E-2010.12 reference manual, including BA_*, HB*/SN*, SIM_LA/DSPF/SPEF/POWER*, MOSRA
+and pole/zero options) is `hspice-lsp/src/lang/options.rs`.
 
 ## 11. Monte Carlo / variation
 - `.PARAM TOX=AGAUSS(200,20,3) XL=AGAUSS(0.1u,0.13u,3)`; `UNIF AUNIF GAUSS AGAUSS LIMIT`.

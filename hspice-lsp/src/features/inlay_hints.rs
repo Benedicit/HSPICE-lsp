@@ -170,7 +170,7 @@ fn source_candidates<'a>(document: &'a Document, element: &Element) -> Vec<Candi
     let named_args = |function: &'static crate::lang::elements::SourceFunctionSpec,
                       args: Vec<&Value>| {
         args.into_iter()
-            .zip(function.arguments)
+            .zip(function.arguments.iter().map(|argument| argument.name))
             .map(|(value, name)| Candidate {
                 offset: value.range().start,
                 label: format!("{name}:"),

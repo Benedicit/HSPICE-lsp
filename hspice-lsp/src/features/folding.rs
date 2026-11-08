@@ -1,4 +1,4 @@
-//! Folding ranges for blocks, `.alter` sections, comment runs and multi-line statements.
+//! Folding ranges for blocks, `.alter` sections, comment runs (opt-in) and multi-line statements.
 
 use std::collections::BTreeMap;
 
@@ -17,10 +17,16 @@ type Fold = (u32, u32, Option<FoldingRangeKind>);
 /// * `workspace` - workspace state
 /// * `document` - document to fold
 pub fn folding_ranges(workspace: &Workspace, document: &Document) -> Option<Vec<FoldingRange>> {
-    let _ = workspace;
+    let comments = workspace
+        .settings
+        .folding
+        .comments
+        .then(|| comment_folds(document))
+        .into_iter()
+        .flatten();
     let folds = block_folds(document)
         .chain(alter_folds(document))
-        .chain(comment_folds(document))
+        .chain(comments)
         .chain(statement_folds(document));
     let by_start: BTreeMap<u32, Fold> = folds.fold(BTreeMap::new(), |mut map, fold| {
         let keep_existing = map
@@ -172,7 +178,11 @@ mod tests {
     use crate::state::line_index::PositionEncoding;
 
     fn folds_of(text: &str) -> Vec<(u32, u32, Option<FoldingRangeKind>)> {
-        let mut workspace = Workspace::new(None, PositionEncoding::Utf16, Settings::default());
+        folds_with(text, Settings::default())
+    }
+
+    fn folds_with(text: &str, settings: Settings) -> Vec<(u32, u32, Option<FoldingRangeKind>)> {
+        let mut workspace = Workspace::new(None, PositionEncoding::Utf16, settings);
         let Ok(uri) = Uri::from_str("file:///tmp/t.sp") else {
             return Vec::new();
         };
@@ -194,10 +204,25 @@ mod tests {
     }
 
     #[test]
-    fn comment_runs_and_header_fold() {
-        let folds = folds_of("t\n* one\n* two\n* three\nR1 a b 1\n* lonely\nR2 a b 1\n");
+    fn comment_runs_and_header_fold_when_enabled() {
+        let mut settings = Settings::default();
+        settings.folding.comments = true;
+        let folds = folds_with(
+            "t\n* one\n* two\n* three\nR1 a b 1\n* lonely\nR2 a b 1\n",
+            settings,
+        );
         assert!(folds.contains(&(1, 3, Some(FoldingRangeKind::Comment))));
         assert!(!folds.iter().any(|fold| fold.0 == 5));
+    }
+
+    #[test]
+    fn comment_runs_do_not_fold_by_default() {
+        let folds = folds_of("t\n* one\n* two\n* three\nR1 a b 1\n");
+        assert!(
+            !folds
+                .iter()
+                .any(|fold| fold.2 == Some(FoldingRangeKind::Comment))
+        );
     }
 
     #[test]

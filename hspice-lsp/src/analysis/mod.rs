@@ -3,6 +3,7 @@
 pub mod blocks;
 pub mod diagnostics;
 pub mod eval;
+pub mod hierarchy;
 pub mod includes;
 pub mod resolve;
 pub mod roles;

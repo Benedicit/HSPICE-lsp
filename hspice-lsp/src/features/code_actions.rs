@@ -13,6 +13,7 @@ use crate::analysis::statement_at;
 use crate::analysis::symbols::{ROOT_SCOPE, SymbolKind};
 use crate::lang::commands::COMMANDS;
 use crate::lang::functions::FUNCTIONS;
+use crate::lang::options::OPTIONS;
 use crate::state::document::Document;
 use crate::state::workspace::Workspace;
 use crate::syntax::ast::{CommandKind, StatementKind, TextRange};
@@ -109,9 +110,8 @@ fn plan_fixes(
             .into_iter()
             .chain(suggestions(workspace, document, code, range))
             .collect(),
-        "unknown-command" | "undefined-subckt" | "undefined-model" | "undefined-function" => {
-            suggestions(workspace, document, code, range)
-        }
+        "unknown-command" | "unknown-option" | "undefined-subckt" | "undefined-model"
+        | "undefined-function" => suggestions(workspace, document, code, range),
         _ => Vec::new(),
     }
 }
@@ -460,6 +460,11 @@ fn candidate_names(document: &Document, code: &str, offset: usize) -> Vec<String
             .flat_map(|spec| std::iter::once(spec.name).chain(spec.aliases.iter().copied()))
             .map(str::to_string)
             .collect(),
+        "unknown-option" => OPTIONS
+            .iter()
+            .flat_map(|spec| std::iter::once(spec.name).chain(spec.aliases.iter().copied()))
+            .map(str::to_string)
+            .collect(),
         "undefined-subckt" => visible(SymbolKind::Subckt),
         "undefined-model" => visible(SymbolKind::Model)
             .into_iter()
@@ -724,6 +729,17 @@ mod tests {
             assert!(apply(&workspace, &uri, suggestion).contains(new));
             assert!(!apply(&workspace, &uri, suggestion).is_empty() && !old.is_empty());
         }
+    }
+
+    #[test]
+    fn did_you_mean_for_options() {
+        let (workspace, uri) = workspace_with("t\n.option runlvll=3\n.end\n");
+        let actions = request(&workspace, &uri, "unknown-option", "runlvll");
+        assert_eq!(actions[0].title, "Did you mean `runlvl`?");
+        assert_eq!(
+            apply(&workspace, &uri, &actions[0]),
+            "t\n.option runlvl=3\n.end\n"
+        );
     }
 
     #[test]

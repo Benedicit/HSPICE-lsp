@@ -4,7 +4,7 @@ use std::path::Path;
 
 use ls_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position};
 
-use super::{definition_text, to_lsp_range, to_offset};
+use super::{argument_docs, definition_text, to_lsp_range, to_offset};
 use crate::analysis::eval::evaluate;
 use crate::analysis::resolve::ElementInfo;
 use crate::analysis::statement_at;
@@ -18,6 +18,7 @@ use crate::lang::elements::{
 use crate::lang::functions::{find_function, find_special_variable};
 use crate::lang::measure::{ANALYSIS_TYPES, find_analysis_keyword, find_measure_keyword};
 use crate::lang::models::{MODEL_TYPES, find_model_type, model_params_for, mosfet_level_name};
+use crate::lang::mosra::find_mosra_param;
 use crate::lang::options::{OptionValue, find_option};
 use crate::lang::output_vars::find_output_var;
 use crate::lang::{Status, find_named};
@@ -151,8 +152,10 @@ fn command_text(spec: &CommandSpec) -> String {
         format!("\n\nAliases: `{}`", spec.aliases.join("`, `"))
     };
     format!(
-        "```spice\n{}\n```\n{}{aliases}{notes}",
-        spec.synopsis, spec.description
+        "```spice\n{}\n```\n{}{}{aliases}{notes}",
+        spec.synopsis,
+        spec.description,
+        argument_docs(spec.arguments)
     )
 }
 
@@ -974,11 +977,17 @@ fn call_text(context: Context, name: &Ident) -> Option<String> {
 /// # Arguments
 /// * `spec` - source function table entry
 fn source_function_text(spec: &SourceFunctionSpec) -> String {
+    let names: Vec<&str> = spec
+        .arguments
+        .iter()
+        .map(|argument| argument.name)
+        .collect();
     format!(
-        "```spice\n{}({})\n```\n{}\n\n{} of {} arguments required.",
+        "```spice\n{}({})\n```\n{}{}\n\n{} of {} arguments required.",
         spec.name.to_ascii_uppercase(),
-        spec.arguments.join(" "),
+        names.join(" "),
         spec.description,
+        argument_docs(spec.arguments),
         spec.required,
         spec.arguments.len()
     )
@@ -1080,6 +1089,12 @@ fn key_text(context: Context, key: &Ident) -> Option<String> {
                         param.name, param.description
                     )
                 })
+        }),
+        Some(".mosra") => find_mosra_param(&key.key).map(|spec| {
+            format!(
+                "**{}** \u{2014} `.MOSRA` parameter\n\n{}",
+                spec.name, spec.description
+            )
         }),
         Some(".measure") => find_measure_keyword(&key.key).map(|spec| {
             format!(
@@ -1286,6 +1301,14 @@ mod tests {
         assert!(text_of("* t\n.model nch nm|os").contains("model type"));
         assert!(text_of("* t\n.model nch nmos le|vel=54").contains("model parameter"));
         assert!(text_of("* t\nR1 a b 1k t|c1=1").contains("First-order temperature coefficient"));
+        assert!(text_of("* t\n.mosra relto|taltime=1e8").contains("`.MOSRA` parameter"));
+        assert!(text_of("* t\n.option run_l|vl=3").contains("speed/accuracy"));
+    }
+
+    #[test]
+    fn hovers_explain_arguments() {
+        assert!(text_of("* t\n.tr|an 1n 10n").contains("- `tstop` \u{2014} End time"));
+        assert!(text_of("* t\nVin a 0 pul|se(0 1)").contains("- `pw` \u{2014} Pulse width"));
     }
 
     #[test]
