@@ -309,8 +309,12 @@ RF analyses (accept): `.HB .HBAC .HBXF .HBLIN .HBLSP .HBNOISE .HBOSC .SN .SNAC .
 `.MOSRA` keys [V] (E-2010.12, K-2015.06): `RelTotalTime` (required), `RelStartTime`, `DEC`, `LIN`, `RelStep`,
 `RelMode` (0 HCI+BTI, 1 HCI, 2 BTI), `SimMode` (0 pre-stress, 1 post-stress, 2 both, 3 continual through
 `.ALTER`), `AgingStart`, `AgingStop`, `AgingPeriod`, `AgingWidth`, `AgingInst="pattern"`, `HciThreshold`,
-`NbtiThreshold`, `Integmod`, `Xpolatemod`, `Tsample1`, `Tsample2`, `Agethreshold`, `MosraLife`, `DegF`,
-`DegFN`, `DegFP`.
+`NbtiThreshold`, `Integmod`, `Xpolatemod`, `Tsample1`, `Tsample2`, `Agethreshold`, `DegradationTime`, `MosraLife`,
+`DegF`, `DegFN`, `DegFP`.
+Restrictions [V] (User Guide E-2010.12, ch. 29): DC/AC analyses and sweeps (`SWEEP`, Monte Carlo) are supported
+only in post-stress runs with `SimMode=1`; a sweep in a stress run aborts HSPICE 2025 (observed), so vary values
+with `.ALTER`.
+The stress phase runs during `.TRAN`. "The MOSRA model cannot be changed in alters."
 
 ### IBIS / field solver (accept)
 `.IBIS 'name' file='f' component='c'`, `.EBD name file= component=`, `.ICM name file= model=`,
@@ -460,7 +464,7 @@ Binned models: `nch.1 … nch.N` with LMIN/LMAX/WMIN/WMAX; elements reference th
 | MACMOD | 0/1/2 | | M element may call subckt (1) / X may map to model (2) |
 | GENK / KLIM | | | Mutual inductors |
 | EM_RECOVERY | num | 1 | EM recovery factor |
-| RUNLVL [C] / RUN_LVL | 0–6 | 3 | Speed/accuracy level (spelling RUN_LVL UNVERIFIED, reported for newer releases) |
+| RUNLVL [C] | 0–6 | 3 | Speed/accuracy level (there is no RUN_LVL spelling) |
 | ACCURATE [C] | flag | 0 | Accurate timestep control |
 | FAST | flag | 0 | Faster, less accurate |
 | METHOD [C] | GEAR/TRAP/BDF | TRAP | Integration method |

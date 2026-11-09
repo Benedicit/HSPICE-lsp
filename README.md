@@ -21,11 +21,12 @@ Everything is based solely upon publicly available manuals/reference sheets onli
   - floating nodes and missing ground
   - nodes and elements in output variables that do not exist (`.print v(out)`, `i(R1)`, `v(x1.out)`)
   - unknown, obsolete or foreign-dialect commands and options, unknown `.MOSRA` parameters
+  - `.MOSRA` combined with `SWEEP`/`MONTE`, `.DC`/`.AC` (both need `SIMMODE=1`) or no `.TRAN`, and MOSRA models changed in `.ALTER`
   - `10M` vs `10MEG`, unused parameters
 - **Completion**: dot commands and element templates (snippets, HSPICE keywords in uppercase), subckts, models matching the element type, nodes, parameters, functions, instance/model parameters, source functions, `.option` names, analysis and `.measure` keywords, output variables, include paths and `.lib` sections.
 - **Hover**: command synopses with argument descriptions, element terminal mapping, parameter values (evaluated), subckt and model cards, node connections, number values (`10M` = 1e-2).
 - **Navigation**: go to definition (including into `.include`/`.lib` files and all model bins), find references, document highlight, rename.
-- **Structure**: document and workspace symbols, folding ranges (comment runs only with `folding.comments`).
+- **Structure**: document and workspace symbols, folding ranges (comment runs only with `folding.comments`, `+` continued statements only with `folding.continuations`).
 - **Highlighting**: semantic tokens on top of tree-sitter (Neovim) or a basic TextMate grammar (VS Code).
 - **Editing help**: signature help, inlay hints (subckt port and terminal names, source-function arguments), quick fixes (`MEG`, add `.param`, insert closers and `.end`, "did you mean …").
 
@@ -97,7 +98,7 @@ opts = {
     diagnostics = { floatingNodes = true, unusedParams = true, unknownOptions = true, megSuffix = true },
     inlayHints = { ports = true, sourceArgs = true },
     workspaceScan = { enabled = true, maxFiles = 500 },
-    folding = { comments = false },
+    folding = { comments = false, continuations = false },
     maxIncludeFileSizeMb = 64,
   },
 }
@@ -117,6 +118,7 @@ Settings are sent as `initializationOptions` and as `settings.hspice` in `worksp
 | `inlayHints.ports` | `true` | Show port names on subcircuit instances |
 | `inlayHints.sourceArgs` | `true` | Show argument names on source instances |
 | `folding.comments` | `false` | Fold runs of consecutive comment lines |
+| `folding.continuations` | `false` | Fold statements continued over several lines with `+` |
 | `workspaceScan.enabled` | `true` | Index other netlists in the workspace |
 | `workspaceScan.maxFiles` | `500` | Maximum number of files scanned |
 | `maxIncludeFileSizeMb` | `64` | Skip included files larger than this |

@@ -119,6 +119,12 @@ pub static MOSRA_PARAMS: &[KeywordSpec] = &[
         description: "Only MOSFETs with degradation at or above this value are written to the output (default 0)",
     },
     KeywordSpec {
+        name: "degradationtime",
+        aliases: &[],
+        takes_value: true,
+        description: "Time at which the MOSRA API computes the degradation (writes a .degradation file)",
+    },
+    KeywordSpec {
         name: "mosralife",
         aliases: &[],
         takes_value: true,
@@ -161,6 +167,7 @@ mod tests {
         assert!(find_mosra_param("RelTotalTime").is_some());
         assert!(find_mosra_param("relstep").is_some());
         assert!(find_mosra_param("bogus").is_none());
-        assert_eq!(MOSRA_PARAMS.len(), 23);
+        assert!(find_mosra_param("DegradationTime").is_some());
+        assert_eq!(MOSRA_PARAMS.len(), 24);
     }
 }

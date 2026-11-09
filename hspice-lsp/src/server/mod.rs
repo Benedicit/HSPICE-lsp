@@ -164,7 +164,7 @@ fn capabilities(encoding: PositionEncoding) -> ServerCapabilities {
             },
         )),
         completion_provider: Some(CompletionOptions {
-            trigger_characters: Some(to_strings(&[".", "(", "=", "'", "/"])),
+            trigger_characters: Some(to_strings(&[".", "(", "=", "'", "/", "+"])),
             resolve_provider: Some(false),
             ..Default::default()
         }),

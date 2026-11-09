@@ -1,5 +1,6 @@
 //! `.model` types, MOSFET LEVEL names and common model parameters.
 
+use super::mosra_model::MOSRA_MODEL_PARAMS;
 use super::{Named, Status, find_named};
 
 /// Static description of a `.model` type.
@@ -617,6 +618,7 @@ pub fn model_params_for(model_type: &str) -> &'static [ModelParamSpec] {
         "nmos" | "pmos" => MOSFET_MODEL_PARAMS,
         "d" => DIODE_MODEL_PARAMS,
         "npn" | "pnp" => BJT_MODEL_PARAMS,
+        "mosra" => MOSRA_MODEL_PARAMS,
         _ => &[],
     }
 }
@@ -663,8 +665,14 @@ mod tests {
         assert_eq!(model_params_for("NMOS"), MOSFET_MODEL_PARAMS);
         assert_eq!(model_params_for("pnp"), BJT_MODEL_PARAMS);
         assert_eq!(model_params_for("d"), DIODE_MODEL_PARAMS);
+        assert_eq!(model_params_for("MOSRA"), MOSRA_MODEL_PARAMS);
         assert!(model_params_for("r").is_empty());
-        for table in [MOSFET_MODEL_PARAMS, DIODE_MODEL_PARAMS, BJT_MODEL_PARAMS] {
+        for table in [
+            MOSFET_MODEL_PARAMS,
+            DIODE_MODEL_PARAMS,
+            BJT_MODEL_PARAMS,
+            MOSRA_MODEL_PARAMS,
+        ] {
             let names: HashSet<&str> = table.iter().map(|p| p.name).collect();
             assert_eq!(names.len(), table.len());
             assert!(
@@ -674,6 +682,7 @@ mod tests {
             );
         }
         assert!(MOSFET_MODEL_PARAMS.len() >= 50);
+        assert_eq!(MOSRA_MODEL_PARAMS.len(), 94);
     }
 
     #[test]

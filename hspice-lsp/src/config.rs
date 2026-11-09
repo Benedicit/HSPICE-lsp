@@ -28,7 +28,7 @@ pub struct DiagnosticSettings {
     pub floating_nodes: bool,
     /// Hint about parameters that are never used.
     pub unused_params: bool,
-    /// Hint about unknown `.option` names and `.mosra` parameters.
+    /// Warn about unknown `.option` names and `.mosra` parameters.
     pub unknown_options: bool,
     /// Hint when `M` (milli) is probably meant as `MEG`.
     pub meg_suffix: bool,
@@ -50,6 +50,8 @@ pub struct InlayHintSettings {
 pub struct FoldingSettings {
     /// Fold runs of consecutive comment lines.
     pub comments: bool,
+    /// Fold statements continued over several lines with `+`.
+    pub continuations: bool,
 }
 
 /// Bounds for the workspace scan.
@@ -132,6 +134,7 @@ mod tests {
         assert!(settings.diagnostics.meg_suffix);
         assert_eq!(settings.workspace_scan.max_files, 500);
         assert!(!settings.folding.comments);
+        assert!(!settings.folding.continuations);
     }
 
     #[test]

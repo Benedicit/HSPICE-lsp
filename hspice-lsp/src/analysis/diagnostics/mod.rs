@@ -5,6 +5,7 @@ mod commands;
 mod common;
 mod elements;
 mod functions;
+mod mosra_conflicts;
 mod nodes;
 mod numbers;
 mod params;
@@ -110,6 +111,7 @@ pub fn compute(
         .chain(floating)
         .chain(commands::check(syntax, analysis, settings))
         .chain(analyses::check(syntax, analysis))
+        .chain(mosra_conflicts::check(syntax, analysis))
         .chain(params::check(syntax, analysis, settings))
         .chain(numbers::check(syntax, analysis, settings))
         .chain(text_rules)

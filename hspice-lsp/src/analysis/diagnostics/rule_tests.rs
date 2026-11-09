@@ -574,14 +574,27 @@ fn value_lists_and_wildcards_are_valid() {
 
 #[test]
 fn renamed_and_newly_listed_options_are_known() {
-    let text = format!("{BASE}.option run_lvl=3 runlvl=3 absin=1 hb_maxiter=100 sim_la=pact\n");
+    let text = format!("{BASE}.option runlvl=3 absin=1 hb_maxiter=100 sim_la=pact\n");
     assert!(!has(&text, "unknown-option"));
+}
+
+#[test]
+fn misspelled_options_are_warnings() {
+    assert!(
+        run(&format!("{BASE}.option run_lvl=3\n")).contains(&("unknown-option", Severity::Warning))
+    );
+    assert!(
+        run(&format!(
+            "{BASE}.mosra reltotaltime=1 bogus=1\n.tran 1n 10n\n"
+        ))
+        .contains(&("unknown-mosra-param", Severity::Warning))
+    );
 }
 
 #[test]
 fn mosra_parameters_are_checked() {
     let full = format!(
-        "{BASE}.param tlife=6.3e8\n.mosra reltotaltime=tlife relstep=6.3e7 mosralife=delvth0 aginginst=\"x1.*\"\n"
+        "{BASE}.param tlife=6.3e8\n.mosra reltotaltime=tlife relstep=6.3e7 mosralife=delvth0 aginginst=\"x1.*\"\n.tran 1n 10n\n.end\n"
     );
     assert_eq!(run(&full), vec![]);
     assert!(has(&format!("{BASE}.mosra relstep=1\n"), "mosra-args"));
@@ -593,6 +606,53 @@ fn mosra_parameters_are_checked() {
         &format!("{BASE}.mosra reltotaltime=nosuch\n"),
         "undefined-param"
     ));
+}
+
+#[test]
+fn mosra_combination_rules() {
+    let stress = format!("{BASE}.mosra reltotaltime=1e8\n");
+    assert_eq!(
+        run(&format!("{stress}.tran 1n 10n sweep V1 1 2 0.5\n.end\n")),
+        vec![("mosra-sweep", Severity::Error)]
+    );
+    assert!(has(
+        &format!("{stress}.tran 1n 10n sweep monte=10\n.end\n"),
+        "mosra-sweep"
+    ));
+    assert!(only(
+        &format!(
+            "{BASE}.mosra reltotaltime=1e8 simmode=1\n.tran 1n 10n sweep monte=10\n.dc V1 0 1 0.1\n.end\n"
+        ),
+        &[]
+    ));
+    assert!(only(
+        &format!(
+            "{BASE}.param m=2\n.mosra reltotaltime=1e8 simmode=m\n.tran 1n 10n sweep monte=10\n.end\n"
+        ),
+        &[]
+    ));
+    assert_eq!(
+        run(&format!("{stress}.tran 1n 10n\n.ac dec 10 1 1meg\n.end\n")),
+        vec![("mosra-dc-ac", Severity::Warning)]
+    );
+    assert_eq!(
+        run(&format!("{stress}.end\n")),
+        vec![("mosra-without-tran", Severity::Warning)]
+    );
+    assert!(!has(
+        &format!("{stress}.tran 1n 10n\n.end\n"),
+        "mosra-without-tran"
+    ));
+    let alter = format!(
+        "{stress}.tran 1n 10n\n.model nra mosra level=1\n.alter aged\n.model nra mosra level=1 tit0=1\n.appendmodel nra mosra nch nmos\n.end\n"
+    );
+    assert_eq!(
+        run(&alter),
+        vec![
+            ("mosra-model-in-alter", Severity::Error),
+            ("mosra-model-in-alter", Severity::Error)
+        ]
+    );
 }
 
 #[test]

@@ -703,7 +703,7 @@ pub static OPTIONS: &[OptionSpec] = &[
     },
     OptionSpec {
         name: "runlvl",
-        aliases: &["run_lvl"],
+        aliases: &[],
         value: OptionValue::Value,
         default: Some("3"),
         description: "Transient speed/accuracy trade-off: 0 off, 1 fastest, 3 default, 5-6 most accurate",
@@ -3406,7 +3406,7 @@ mod tests {
             find_option("probe").map(|o| o.value),
             Some(OptionValue::FlagOrValue)
         );
-        assert_eq!(find_option("RUN_LVL").map(|o| o.name), Some("runlvl"));
+        assert!(find_option("RUN_LVL").is_none());
         assert_eq!(find_option("absi").map(|o| o.name), Some("absi"));
         assert_eq!(find_option("posttop").map(|o| o.name), Some("posttop"));
         assert_eq!(find_option("hb_maxiter").map(|o| o.name), Some("hbmaxiter"));

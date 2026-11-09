@@ -146,7 +146,7 @@ fn option_diagnostics(command: &Command, settings: &DiagnosticSettings) -> Vec<D
             None => settings.unknown_options.then(|| {
                 Diagnostic::new(
                     name.range,
-                    Severity::Hint,
+                    Severity::Warning,
                     "unknown-option",
                     format!("Unknown option `{}`", name.text),
                 )
@@ -187,7 +187,7 @@ fn mosra_diagnostics(command: &Command, settings: &DiagnosticSettings) -> Vec<Di
         .map(|name| {
             Diagnostic::new(
                 name.range,
-                Severity::Hint,
+                Severity::Warning,
                 "unknown-mosra-param",
                 format!("Unknown `.MOSRA` parameter `{}`", name.text),
             )

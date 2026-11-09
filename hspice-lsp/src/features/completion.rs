@@ -53,18 +53,21 @@ impl Proposal {
 /// * `workspace` - workspace state
 /// * `document` - document being edited
 /// * `position` - cursor position
+/// * `trigger` - character that triggered the request, if any
 pub fn completion(
     workspace: &Workspace,
     document: &Document,
     position: Position,
+    trigger: Option<&str>,
 ) -> Option<CompletionResponse> {
     let offset = to_offset(workspace, document, position);
-    if document
+    let in_title = document
         .syntax
         .title_ranges
         .iter()
-        .any(|range| range.touches(offset))
-    {
+        .any(|range| range.touches(offset));
+    let operator_plus = trigger == Some("+") && !after_continuation_marker(&document.text, offset);
+    if in_title || operator_plus {
         return None;
     }
     let scan = line_context::scan(&document.text, offset)?;
@@ -88,6 +91,17 @@ pub fn completion(
         .map(|candidate| candidate.into_item(range))
         .collect();
     (!items.is_empty()).then_some(CompletionResponse::Array(items))
+}
+
+/// Returns true if the cursor's line holds only a `+` continuation marker before the cursor.
+///
+/// # Arguments
+/// * `text` - document text
+/// * `offset` - cursor offset
+fn after_continuation_marker(text: &str, offset: usize) -> bool {
+    let before = text.get(..offset).unwrap_or_default();
+    let line_start = before.rfind('\n').map_or(0, |index| index + 1);
+    before[line_start..].trim() == "+"
 }
 
 /// Returns the scope the cursor is in, using the logical line or the closest preceding statement.
@@ -273,10 +287,18 @@ fn model_param_proposal(scan: &LineScan) -> Option<Proposal> {
     let model_type = scan.positionals().get(1).map(|token| token.text.clone())?;
     let used: HashSet<String> = scan
         .text
-        .split(|character: char| character.is_whitespace() || character == '(' || character == ')')
-        .filter_map(|word| {
-            word.split_once('=')
-                .map(|(key, _)| key.to_ascii_lowercase())
+        .split('=')
+        .rev()
+        .skip(1)
+        .filter_map(|segment| {
+            segment
+                .trim_end()
+                .rsplit(|character: char| {
+                    character.is_whitespace() || character == '(' || character == ')'
+                })
+                .next()
+                .filter(|key| !key.is_empty())
+                .map(str::to_ascii_lowercase)
         })
         .collect();
     Some(Proposal::new(
@@ -585,11 +607,22 @@ mod tests {
     use super::*;
 
     fn complete(opened: &Opened) -> Vec<CompletionItem> {
+        complete_triggered(opened, None)
+    }
+
+    fn complete_triggered(opened: &Opened, trigger: Option<&str>) -> Vec<CompletionItem> {
         let document = opened.workspace.document(&opened.uri).expect("document");
-        match completion(&opened.workspace, document, opened.position) {
+        match completion(&opened.workspace, document, opened.position, trigger) {
             Some(CompletionResponse::Array(items)) => items,
             _ => Vec::new(),
         }
+    }
+
+    fn labels_after_plus(marked: &str) -> Vec<String> {
+        complete_triggered(&open(marked), Some("+"))
+            .into_iter()
+            .map(|item| item.label)
+            .collect()
     }
 
     fn labels(marked: &str) -> Vec<String> {
@@ -780,7 +813,7 @@ mod tests {
             .find(|item| item.label == "NUMDGT")
             .expect("NUMDGT");
         assert_eq!(edit_text(numdgt).0, "NUMDGT=${1}");
-        let renamed = complete(&open("* t\n.option run_l|"));
+        let renamed = complete(&open("* t\n.option runl|"));
         assert!(renamed.iter().any(|item| item.label == "RUNLVL"));
     }
 
@@ -794,6 +827,23 @@ mod tests {
         assert!(has(&found, "VTO=") || has(&found, "VTH0="));
         let found = labels("* t\n.model nch nmos level=1 |");
         assert!(!has(&found, "LEVEL="));
+    }
+
+    #[test]
+    fn completes_model_params_on_continuation_lines() {
+        let found = labels("* t\n.model n_ra mosra level=1\n+ tit|");
+        assert!(has(&found, "TIT0=") && has(&found, "TITCE="));
+        let found = labels_after_plus("* t\n.model nch nmos level=54\n+|");
+        assert!(has(&found, "VTH0="));
+        let found = labels("* t\n.model nch nmos level=54\n+ vth0 = 0.4 |");
+        assert!(!has(&found, "VTH0=") && has(&found, "U0="));
+    }
+
+    #[test]
+    fn plus_triggers_only_on_continuation_markers() {
+        assert!(labels_after_plus("* t\n.param b=1\n.param a='b+|'").is_empty());
+        assert!(labels_after_plus("* t\nR1 a b 1e+|").is_empty());
+        assert!(!labels_after_plus("* t\n.option post\n  +|").is_empty());
     }
 
     #[test]

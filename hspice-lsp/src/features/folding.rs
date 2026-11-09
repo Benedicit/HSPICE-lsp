@@ -1,4 +1,4 @@
-//! Folding ranges for blocks, `.alter` sections, comment runs (opt-in) and multi-line statements.
+//! Folding ranges for blocks, `.alter` sections, comment runs (opt-in) and `+` continued statements (opt-in).
 
 use std::collections::BTreeMap;
 
@@ -24,10 +24,17 @@ pub fn folding_ranges(workspace: &Workspace, document: &Document) -> Option<Vec<
         .then(|| comment_folds(document))
         .into_iter()
         .flatten();
+    let continuations = workspace
+        .settings
+        .folding
+        .continuations
+        .then(|| statement_folds(document))
+        .into_iter()
+        .flatten();
     let folds = block_folds(document)
         .chain(alter_folds(document))
         .chain(comments)
-        .chain(statement_folds(document));
+        .chain(continuations);
     let by_start: BTreeMap<u32, Fold> = folds.fold(BTreeMap::new(), |mut map, fold| {
         let keep_existing = map
             .get(&fold.0)
@@ -226,9 +233,20 @@ mod tests {
     }
 
     #[test]
-    fn continued_statements_fold() {
-        let folds = folds_of("t\n.model nch nmos\n+ vth0=0.4\n+ u0=300\nR1 a b 1\n");
+    fn continued_statements_fold_when_enabled() {
+        let mut settings = Settings::default();
+        settings.folding.continuations = true;
+        let folds = folds_with(
+            "t\n.model nch nmos\n+ vth0=0.4\n+ u0=300\nR1 a b 1\n",
+            settings,
+        );
         assert!(folds.contains(&(1, 3, Some(FoldingRangeKind::Region))));
+    }
+
+    #[test]
+    fn continued_statements_do_not_fold_by_default() {
+        let folds = folds_of("t\n.model nch nmos\n+ vth0=0.4\n+ u0=300\nR1 a b 1\n");
+        assert!(folds.is_empty());
     }
 
     #[test]

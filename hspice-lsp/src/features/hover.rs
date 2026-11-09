@@ -1302,7 +1302,7 @@ mod tests {
         assert!(text_of("* t\n.model nch nmos le|vel=54").contains("model parameter"));
         assert!(text_of("* t\nR1 a b 1k t|c1=1").contains("First-order temperature coefficient"));
         assert!(text_of("* t\n.mosra relto|taltime=1e8").contains("`.MOSRA` parameter"));
-        assert!(text_of("* t\n.option run_l|vl=3").contains("speed/accuracy"));
+        assert!(text_of("* t\n.option runl|vl=3").contains("speed/accuracy"));
     }
 
     #[test]

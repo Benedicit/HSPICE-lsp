@@ -121,6 +121,10 @@ Rdup4 a b 4k
 .mosra relstep=1 $ expect: mosra-args
 .mosra reltotaltime=1 bogusparam=1 $ expect: unknown-mosra-param
 
+* case: mosra-sweep and mosra-dc-ac (the .mosra commands above run the stress phase)
+.tran 1n 10n sweep monte=3 $ expect: mosra-sweep
+.dc Vbias 0 1 0.1 $ expect: mosra-dc-ac
+
 * case: bad-port (ground in port list)
 .subckt bp a 0 $ expect: bad-port
 Rbp1 a 0 1k
@@ -132,6 +136,10 @@ Rbp2 a 0 2k
 Rnm1 a b 1k
 Rnm2 a b 2k
 .ends other $ expect: ends-name-mismatch
+
+* case: mosra-model-in-alter (every later case lies in this .alter section)
+.alter aged
+.model nra mosra level=1 $ expect: mosra-model-in-alter
 
 * case: unclosed-block (no .ends before .end)
 .subckt unclosed a b $ expect: unclosed-block

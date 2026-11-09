@@ -32,8 +32,9 @@ pub fn handle_request(workspace: &Workspace, request: Request) -> Response {
     let ws = workspace;
     respond::<Completion>(&request, |params| {
         let position = params.text_document_position;
+        let trigger = params.context.and_then(|context| context.trigger_character);
         Ok(on_document(ws, &position.text_document.uri, |document| {
-            completion::completion(ws, document, position.position)
+            completion::completion(ws, document, position.position, trigger.as_deref())
         }))
     })
     .or_else(|| {

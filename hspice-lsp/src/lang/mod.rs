@@ -6,6 +6,7 @@ pub mod functions;
 pub mod measure;
 pub mod models;
 pub mod mosra;
+pub mod mosra_model;
 pub mod options;
 pub mod output_vars;
 
