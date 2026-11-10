@@ -1,15 +1,22 @@
-//! Parameter rules: reserved names, duplicates, unused parameters and unquoted expressions.
+//! Parameter rules: reserved names, duplicates, unused parameters, unquoted expressions, output signals
+//! in parameters and `.measure` keywords used as parameters.
 
 use std::collections::HashSet;
 
 use super::common::{live_commands, repeated_definitions};
+use super::walk::flatten_expression;
 use super::{Diagnostic, Severity};
 use crate::analysis::Analysis;
-use crate::analysis::symbols::{ParamSource, SymbolDetail, SymbolKind};
+use crate::analysis::symbols::{ParamSource, ScopeId, SymbolDetail, SymbolKind};
 use crate::config::DiagnosticSettings;
-use crate::lang::functions::find_special_variable;
+use crate::lang::commands::find_command;
+use crate::lang::functions::{find_function, find_special_variable};
+use crate::lang::measure::find_measure_keyword;
+use crate::lang::output_vars::{OutputArgKind, output_argument};
 use crate::state::document::SyntaxInfo;
-use crate::syntax::ast::{CommandKind, ParamDef};
+use crate::syntax::ast::{
+    Arg, AssignKey, Assignment, Command, CommandKind, Expr, ExprKind, Ident, ParamDef, Value,
+};
 use crate::syntax::number::parse_number;
 
 /// Runs all parameter rules except the text-based quoting rule.
@@ -26,6 +33,8 @@ pub fn check(
     reserved_params(syntax, analysis)
         .into_iter()
         .chain(duplicate_params(analysis))
+        .chain(output_signal_params(syntax, analysis))
+        .chain(measure_keyword_params(syntax, analysis))
         .chain(
             settings
                 .unused_params
@@ -33,6 +42,156 @@ pub fn check(
                 .into_iter()
                 .flatten(),
         )
+        .collect()
+}
+
+/// Returns true for `.measure` / `.meas`.
+///
+/// # Arguments
+/// * `command` - dot command
+fn is_measure(command: &Command) -> bool {
+    find_command(&command.keyword.key).is_some_and(|spec| spec.name == ".measure")
+}
+
+/// Returns the name of the first node or element output variable called in an expression.
+///
+/// # Arguments
+/// * `analysis` - semantic analysis
+/// * `scope` - scope of the statement (user functions may shadow output variables)
+/// * `expr` - expression to search
+fn output_signal<'a>(analysis: &Analysis, scope: ScopeId, expr: &'a Expr) -> Option<&'a Ident> {
+    flatten_expression(expr)
+        .into_iter()
+        .find_map(|part| match &part.kind {
+            ExprKind::Call { name, .. } => Some(name),
+            _ => None,
+        })
+        .filter(|name| {
+            matches!(
+                output_argument(&name.key),
+                Some(OutputArgKind::Nodes | OutputArgKind::Element)
+            ) && find_function(&name.key).is_none()
+                && analysis
+                    .lookup(SymbolKind::Function, scope, &name.key)
+                    .is_none()
+        })
+}
+
+/// Warns about `.param` values and `.measure ... PARAM=` equations that contain `v()` or `i()`;
+/// HSPICE reports that such results may be incorrect.
+///
+/// # Arguments
+/// * `syntax` - parse results
+/// * `analysis` - semantic analysis
+fn output_signal_params(syntax: &SyntaxInfo, analysis: &Analysis) -> Vec<Diagnostic> {
+    live_commands(syntax, analysis)
+        .flat_map(|(index, command, _)| {
+            let subjects: Vec<(String, &Expr)> = match &command.kind {
+                CommandKind::Param { definitions } => definitions
+                    .iter()
+                    .filter(|definition| definition.arguments.is_empty())
+                    .filter_map(|definition| {
+                        let subject = format!("Parameter `{}`", definition.name.text);
+                        definition.value.as_ref().map(|value| (subject, value))
+                    })
+                    .collect(),
+                CommandKind::Generic { args } if is_measure(command) => args
+                    .iter()
+                    .filter_map(|arg| match arg {
+                        Arg::Assign(Assignment {
+                            key: AssignKey::Name(key),
+                            value: Some(Value::Expr(expr)),
+                            ..
+                        }) if key.key == "param" => {
+                            Some(("The `.measure` equation".to_string(), expr))
+                        }
+                        _ => None,
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            };
+            let scope = analysis.structure.scope_of(index);
+            subjects.into_iter().filter_map(move |(subject, expr)| {
+                output_signal(analysis, scope, expr).map(|call| {
+                    Diagnostic::new(
+                        call.range,
+                        Severity::Warning,
+                        "output-signal-param",
+                        format!(
+                            "{subject} depends on the output signal `{}()`; HSPICE warns that the result may be incorrect",
+                            call.text
+                        ),
+                    )
+                })
+            })
+        })
+        .collect()
+}
+
+/// Returns the `.measure` keywords written where a value is expected: `to=td` or `TO td`.
+///
+/// # Arguments
+/// * `args` - `.measure` arguments
+fn keywords_as_values(args: &[Arg]) -> Vec<&Ident> {
+    let assigned = args.iter().filter_map(|arg| match arg {
+        Arg::Assign(Assignment {
+            value:
+                Some(Value::Expr(Expr {
+                    kind: ExprKind::Ident(word),
+                    ..
+                })),
+            ..
+        }) => Some(word).filter(|word| !matches!(word.key.as_str(), "last" | "trig")),
+        _ => None,
+    });
+    let positional = args.windows(2).filter_map(|pair| match pair {
+        [Arg::Value(Value::Word(key)), Arg::Value(Value::Word(word))] => {
+            find_measure_keyword(&key.key)
+                .filter(|spec| spec.takes_value)
+                .map(|_| word)
+        }
+        _ => None,
+    });
+    assigned
+        .chain(positional)
+        .filter(|word| find_measure_keyword(&word.key).is_some())
+        .collect()
+}
+
+/// Warns when a parameter named like a `.measure` keyword is used as a value in `.measure`;
+/// the strict parser reads the keyword, not the parameter.
+///
+/// # Arguments
+/// * `syntax` - parse results
+/// * `analysis` - semantic analysis
+fn measure_keyword_params(syntax: &SyntaxInfo, analysis: &Analysis) -> Vec<Diagnostic> {
+    live_commands(syntax, analysis)
+        .filter(|(_, command, _)| is_measure(command))
+        .flat_map(|(index, command, _)| {
+            let scope = analysis.structure.scope_of(index);
+            let args: &[Arg] = match &command.kind {
+                CommandKind::Generic { args } => args,
+                _ => &[],
+            };
+            keywords_as_values(args)
+                .into_iter()
+                .filter(move |word| {
+                    analysis
+                        .lookup(SymbolKind::Param, scope, &word.key)
+                        .is_some()
+                })
+                .map(|word| {
+                    Diagnostic::new(
+                        word.range,
+                        Severity::Warning,
+                        "measure-keyword-param",
+                        format!(
+                            "`{0}` is a `.measure` keyword, so HSPICE does not read it as parameter `{0}` here; rename the parameter",
+                            word.text
+                        ),
+                    )
+                })
+        })
         .collect()
 }
 

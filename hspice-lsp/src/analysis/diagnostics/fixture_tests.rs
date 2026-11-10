@@ -15,9 +15,7 @@ use crate::state::workspace::Workspace;
 /// # Arguments
 /// * `relative` - path below `tests/fixtures`
 fn fixture_path(relative: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures")
-        .join(relative)
+    crate::test_support::fixtures().join(relative)
 }
 
 /// Opens a fixture in a fresh workspace and returns its text and diagnostics.

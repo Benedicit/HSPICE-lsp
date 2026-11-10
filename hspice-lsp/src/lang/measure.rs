@@ -321,6 +321,12 @@ pub static MEASURE_KEYWORDS: &[KeywordSpec] = &[
         description: "Maximum frequency for FFT measures",
     },
     KeywordSpec {
+        name: "minfreq",
+        aliases: &[],
+        takes_value: true,
+        description: "Minimum frequency for the FFT SFDR measure (default 0)",
+    },
+    KeywordSpec {
         name: "binsiz",
         aliases: &[],
         takes_value: true,
@@ -361,6 +367,12 @@ pub static MEASURE_KEYWORDS: &[KeywordSpec] = &[
         aliases: &[],
         takes_value: false,
         description: "FFT effective number of bits",
+    },
+    KeywordSpec {
+        name: "sfdr",
+        aliases: &[],
+        takes_value: false,
+        description: "FFT spurious-free dynamic range between MINFREQ and MAXFREQ",
     },
 ];
 
@@ -540,7 +552,7 @@ pub fn find_analysis_keyword(name: &str) -> Option<&'static KeywordSpec> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
+    use crate::lang::assert_unique_lowercase;
 
     #[test]
     fn finds_keywords_by_name_and_alias() {
@@ -564,12 +576,7 @@ mod tests {
     #[test]
     fn tables_are_lowercase_unique_and_described() {
         for table in [ANALYSIS_TYPES, MEASURE_KEYWORDS, ANALYSIS_KEYWORDS] {
-            let names: Vec<&str> = table
-                .iter()
-                .flat_map(|k| std::iter::once(k.name).chain(k.aliases.iter().copied()))
-                .collect();
-            assert_eq!(names.len(), names.iter().collect::<HashSet<_>>().len());
-            assert!(names.iter().all(|n| *n == n.to_ascii_lowercase()));
+            assert_unique_lowercase(table);
             assert!(table.iter().all(|k| !k.description.is_empty()));
         }
     }

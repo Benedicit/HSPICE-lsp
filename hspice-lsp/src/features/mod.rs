@@ -19,6 +19,14 @@ use crate::state::document::Document;
 use crate::state::workspace::Workspace;
 use crate::syntax::ast::TextRange;
 
+/// Returns true for characters that separate netlist tokens.
+///
+/// # Arguments
+/// * `character` - character to test
+pub fn is_token_delimiter(character: char) -> bool {
+    character.is_whitespace() || ",=()'\"".contains(character)
+}
+
 /// Renders documented arguments as a Markdown list preceded by a blank line; empty if there are none.
 ///
 /// # Arguments

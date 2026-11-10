@@ -9,7 +9,7 @@ use crate::analysis::eval::evaluate;
 use crate::analysis::resolve::ElementInfo;
 use crate::analysis::statement_at;
 use crate::analysis::symbols::{
-    Origin, ROOT_SCOPE, RefContext, ScopeId, Symbol, SymbolDetail, SymbolId, SymbolKind,
+    Origin, ROOT_SCOPE, RefContext, ScopeId, Symbol, SymbolDetail, SymbolId, SymbolKind, bin_base,
 };
 use crate::lang::commands::{CommandSpec, find_command};
 use crate::lang::elements::{
@@ -17,10 +17,10 @@ use crate::lang::elements::{
 };
 use crate::lang::functions::{find_function, find_special_variable};
 use crate::lang::measure::{ANALYSIS_TYPES, find_analysis_keyword, find_measure_keyword};
-use crate::lang::models::{MODEL_TYPES, find_model_type, model_params_for, mosfet_level_name};
+use crate::lang::models::{find_model_type, model_params_for, mosfet_level_name};
 use crate::lang::mosra::find_mosra_param;
 use crate::lang::options::{OptionValue, find_option};
-use crate::lang::output_vars::find_output_var;
+use crate::lang::output_vars::find_terminal_output_var;
 use crate::lang::{Status, find_named};
 use crate::state::document::Document;
 use crate::state::workspace::Workspace;
@@ -554,12 +554,7 @@ fn model_text(document: &Document, symbol: &Symbol) -> String {
         ),
         _ => (String::new(), String::new()),
     };
-    let base = symbol
-        .name
-        .key
-        .rsplit_once('.')
-        .filter(|(_, bin)| bin.chars().all(|c| c.is_ascii_digit()))
-        .map_or(symbol.name.key.as_str(), |(base, _)| base);
+    let base = bin_base(&symbol.name.key).unwrap_or(&symbol.name.key);
     let bins = document.analysis.table.bins(base).len();
     let bins_line = if bins > 0 {
         format!("\n\nBinned model: {bins} bins of `{base}`")
@@ -952,13 +947,7 @@ fn scale_notes(text: &str, parsed: &ParsedNumber) -> Vec<String> {
 /// * `name` - call name
 fn call_text(context: Context, name: &Ident) -> Option<String> {
     let source = find_source_function(&name.key).map(source_function_text);
-    let output = find_output_var(&name.key)
-        .or_else(|| {
-            find_output_var(
-                name.key
-                    .trim_end_matches(|character: char| character.is_ascii_digit()),
-            )
-        })
+    let output = find_terminal_output_var(&name.key)
         .map(|spec| format!("```spice\n{}\n```\n{}", spec.signature, spec.description));
     let function = find_function(&name.key)
         .map(|spec| format!("```spice\n{}\n```\n{}", spec.signature, spec.description));
@@ -977,15 +966,9 @@ fn call_text(context: Context, name: &Ident) -> Option<String> {
 /// # Arguments
 /// * `spec` - source function table entry
 fn source_function_text(spec: &SourceFunctionSpec) -> String {
-    let names: Vec<&str> = spec
-        .arguments
-        .iter()
-        .map(|argument| argument.name)
-        .collect();
     format!(
-        "```spice\n{}({})\n```\n{}{}\n\n{} of {} arguments required.",
-        spec.name.to_ascii_uppercase(),
-        names.join(" "),
+        "```spice\n{}\n```\n{}{}\n\n{} of {} arguments required.",
+        spec.signature(),
         spec.description,
         argument_docs(spec.arguments),
         spec.required,
@@ -1011,15 +994,14 @@ fn word_text(context: Context, word: &Ident) -> Option<String> {
             })
             .or_else(|| analysis_type_text(&word.key)),
         Some(".print" | ".probe" | ".plot" | ".graph") => analysis_type_text(&word.key),
-        Some(".model") if context.model_type == Some(word.key.as_str()) => MODEL_TYPES
-            .iter()
-            .find(|spec| spec.name == word.key)
-            .map(|spec| {
+        Some(".model") if context.model_type == Some(word.key.as_str()) => {
+            find_model_type(&word.key).map(|spec| {
                 format!(
                     "**{}** \u{2014} model type\n\n{}",
                     spec.name, spec.description
                 )
-            }),
+            })
+        }
         Some(_) => find_analysis_keyword(&word.key).map(|spec| {
             format!(
                 "**{}** \u{2014} analysis keyword\n\n{}",
@@ -1123,10 +1105,9 @@ fn key_text(context: Context, key: &Ident) -> Option<String> {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used)]
 mod tests {
-    use super::super::completion::test_support::{Opened, open, open_in_fixtures};
     use super::*;
+    use crate::test_support::{Opened, fixtures, open, open_in_fixtures};
 
     fn hover_at(opened: &Opened) -> Option<Hover> {
         let document = opened.workspace.document(&opened.uri)?;
@@ -1202,10 +1183,7 @@ mod tests {
 
     #[test]
     fn hovers_inverter_fixture() {
-        let text = std::fs::read_to_string(
-            super::super::completion::test_support::fixtures().join("inverter_tb.sp"),
-        )
-        .expect("fixture");
+        let text = std::fs::read_to_string(fixtures().join("inverter_tb.sp")).expect("fixture");
         let marked = text.replacen("wn=wn", "wn=w|n", 1);
         let opened = open_in_fixtures(&marked);
         let Some(HoverContents::Markup(markup)) = hover_at(&opened).map(|hover| hover.contents)

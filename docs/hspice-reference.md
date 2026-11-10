@@ -1,6 +1,7 @@
 # HSPICE language reference (condensed)
 
-Compiled from: HSPICE User Guide: Simulation and Analysis E-2010.12, HSPICE Reference Manual: Commands and
+Compiled from: HSPICE User Guide: Basic Simulation and Analysis H-2013.03 (MOSRA ch. 19, messages ch. 32,
+strict parser app. C), HSPICE User Guide: Simulation and Analysis E-2010.12, HSPICE Reference Manual: Commands and
 Control Options E-2010.12, MOSFET Models D-2010.12, Signal Integrity guide E-2010.12, Synopsys quick
 reference cards K-2015.06 / M-2017.03, HSPICE Quick Reference U-2003.03, Star-Hspice 1998.2, IBIS-ISS 1.0,
 Sandia SAND2018-14272 (behaviour tested on HSPICE M-2017.03).
@@ -237,7 +238,7 @@ Keywords also: `DC`, `AC`, `power=`, `imp=`.
 | `.POWER` | | `.POWER signal <REF=vname FROM=t1 TO=t2>` | Power table |
 | `.POWERDC` | | `.POWERDC TOP\|ALL <subckt …>` | DC leakage power |
 | `.SWEEPBLOCK` | | `.SWEEPBLOCK name sweepspec <sweepspec …>` | Named sweep union |
-| `.STORE` | | `.STORE <file=f> <time=t> <repeat=t>` | Transient checkpoint |
+| `.STORE` | | `.STORE <TYPE=IC\|MEMDUMP> <FILE=prefix> <TIME=t …> <REPEAT=t> <TRANTIME=0\|1> <SAVE_ON_KILL=0\|1>` | Transient checkpoint |
 | `.SURGE` | | `.SURGE threshold width node1 <node2 …>` | Current surge detection |
 | `.CHECK` | | `.CHECK EDGE\|FALL\|GLOBAL_LEVEL\|HOLD\|IRDROP\|RISE\|SETUP\|SLEW …` | Timing checks |
 RF analyses (accept): `.HB .HBAC .HBXF .HBLIN .HBLSP .HBNOISE .HBOSC .SN .SNAC .SNXF .SNFT .SNNOISE .SNOSC
@@ -304,13 +305,15 @@ RF analyses (accept): `.HB .HBAC .HBXF .HBLIN .HBLSP .HBNOISE .HBOSC .SN .SNAC .
 | `.IVTH` | | `.IVTH model Ivth0=v DW=v DL=v VDSMIN=v` |
 | `.FLAT` | | `.FLAT <subckt> elem` |
 | `.CFL_PROTOTYPE` | | `.CFL_PROTOTYPE fn(type,..)` |
-| `.MODULE` | | `.MODULE label` (closing `.ENDMODULE` UNVERIFIED) |
+| `.MODULE` / `.ENDMODULE` | | `.MODULE label <BASE=base>` … `.ENDMODULE` (3D-IC) [V] |
+| `.MODULEVAR` / `.ENDMODULEVAR` | | `.MODULEVAR label` … `.ENDMODULEVAR <label>`; only `.PARAM`, `.OPTION`, `.TEMP`, `.LIB`, `.INCLUDE` inside |
+| `.PRUNE` | | `.PRUNE 'flat DSPF file' 'active-net file'` |
 
 `.MOSRA` keys [V] (E-2010.12, K-2015.06): `RelTotalTime` (required), `RelStartTime`, `DEC`, `LIN`, `RelStep`,
 `RelMode` (0 HCI+BTI, 1 HCI, 2 BTI), `SimMode` (0 pre-stress, 1 post-stress, 2 both, 3 continual through
 `.ALTER`), `AgingStart`, `AgingStop`, `AgingPeriod`, `AgingWidth`, `AgingInst="pattern"`, `HciThreshold`,
 `NbtiThreshold`, `Integmod`, `Xpolatemod`, `Tsample1`, `Tsample2`, `Agethreshold`, `DegradationTime`, `MosraLife`,
-`DegF`, `DegFN`, `DegFP`.
+`DegF`, `DegFN`, `DegFP`, `Frequency` (H-2013.03). `RelTotalTime` accepts the units sec, min, hr, day, yr.
 Restrictions [V] (User Guide E-2010.12, ch. 29): DC/AC analyses and sweeps (`SWEEP`, Monte Carlo) are supported
 only in post-stress runs with `SimMode=1`; a sweep in a stress run aborts HSPICE 2025 (observed), so vary values
 with `.ALTER`.
@@ -360,7 +363,10 @@ General: `.MEAS <DC|AC|TRAN|DC_CONT|AC_CONT|TRAN_CONT> result <body> <GOAL=v> <M
 8. `ERR|ERR1|ERR2|ERR3 meas_var calc_var <MINVAL=> <IGNOR|YMIN=> <YMAX=> <WEIGHT=> <FROM=> <TO=>`
 9. `PARAM='expr'` (or `"expr"`)
 10. Special: `pushout=`, `pushout_per=`, `.MEAS FFT r FIND vm|vp|vr|vi|vdb|im|ip|ir|ii|idb(sig) AT=f`,
-    `.MEAS FFT r THD|SNR|SNDR|ENOB sig <nbharm=n> <maxfreq=v> <BINSIZ=n>`, `LSTB(x)`, `ACM_*`, `DCM_*`.
+    `.MEAS FFT r THD|SNR|SNDR|ENOB sig <nbharm=n> <maxfreq=v> <BINSIZ=n>`,
+    `.MEAS FFT r SFDR sig <minfreq=v> <maxfreq=v>`, `LSTB(x)`, `ACM_*`, `DCM_*`.
+- Strict parser (app. C): a parameter named like a `.measure` keyword (`td`, `from`, `to` …) cannot be used
+  as a value in `.measure`; `PARAM='expr'` must not depend on `v()`/`i()`.
 Keywords: TRIG TARG VAL TD RISE FALL CROSS LAST AT WHEN FIND FROM TO AVG RMS MIN MAX PP EM_AVG INTEG INTEGRAL
 DERIV DERIVATIVE ERR ERR1 ERR2 ERR3 PARAM GOAL MINVAL WEIGHT PRINT REVERSE IGNOR YMIN YMAX. `power` is a
 valid out_var. Measure results can be used as names in later `.MEAS PARAM=` expressions.
@@ -525,6 +531,12 @@ Binned models: `nch.1 … nch.N` with LMIN/LMAX/WMIN/WMAX; elements reference th
 | RANDGEN | 0/'moa'/1 | 0 | Random generator |
 | SI_SCALE_SYMBOLS | 0/1 | 0 | With -case 1: M = mega, m = milli |
 | PCB_SCALE_FORMAT | 0/1 | 0 | Infix scale factors |
+| MIXED_NUM_FORMAT | 0/1 | 0 | 1 allows exponent plus scale factor (`1e-6u`) |
+| GEN_CUR_POL | ON/OFF | OFF | Generic branch current polarity (F-2011.09) |
+| SET_MISSING_VALUES | Random/Zero | Random | Missing values with SAMPLING_METHOD=External |
+
+RUNLVL (active by default) ignores LVLTIM DVDT FT FAST TRTOL ABSVAR RELVAR RELQ CHGTOL DVTR IMIN ITL3. [V]
+Documented value sets used for completion and the `invalid-value` warning: `hspice-lsp/src/lang/value_sets.rs`.
 Obsolete options (deprecation hint): ACCT ALT999 ALT9999 BKPSIZ CDS CO H9007 MEASSORT MENTOR MODSRH PIVREF NOPAGE
 PIVREL PLIM SDA SPICE SIM_LA_MINMODE ZUKEN.
 

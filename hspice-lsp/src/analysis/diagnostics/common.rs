@@ -12,20 +12,6 @@ use crate::syntax::ast::{Command, Element, Statement, StatementKind, TextRange};
 /// Suffix appended to "undefined" messages when definitions of other files may be missing.
 const MISSING_DEFINITIONS_NOTE: &str = " (definitions from other files may be missing)";
 
-/// Returns true if the statement carries no semantics (variation blocks, encrypted text, unparsable lines).
-///
-/// # Arguments
-/// * `analysis` - analysis with the block structure
-/// * `index` - statement index
-pub fn is_skipped(analysis: &Analysis, index: usize) -> bool {
-    analysis
-        .structure
-        .skipped
-        .get(index)
-        .copied()
-        .unwrap_or(false)
-}
-
 /// Iterates over all statements that have semantics, with their indices.
 ///
 /// # Arguments
@@ -40,7 +26,7 @@ pub fn live_statements<'a>(
         .statements
         .iter()
         .enumerate()
-        .filter(move |(index, _)| !is_skipped(analysis, *index))
+        .filter(move |(index, _)| !analysis.structure.is_skipped(*index))
 }
 
 /// Iterates over all live dot commands with their statement index and range.

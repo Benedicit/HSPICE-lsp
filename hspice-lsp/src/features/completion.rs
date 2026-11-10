@@ -3,24 +3,25 @@
 mod candidate;
 pub(crate) mod line_context;
 mod sources;
-#[cfg(test)]
-#[allow(clippy::expect_used)]
-pub(crate) mod test_support;
 
 use std::collections::HashSet;
 
 use ls_types::{CompletionResponse, Position};
 
 use self::candidate::Candidate;
-use self::line_context::{FrameKind, LineScan, identifier_start, name_start};
+use self::line_context::{
+    FrameKind, LineScan, identifier_start, is_expression_line, is_source_element, name_start,
+};
 use self::sources::Env;
 use super::{to_lsp_range, to_offset};
+use crate::analysis::blocks::BlockKind;
 use crate::analysis::symbols::SymbolKind;
 use crate::lang::commands::find_command;
 use crate::lang::elements::{ElementSpec, ReferenceKind, find_element, find_source_function};
 use crate::lang::functions::find_function;
 use crate::lang::models::model_params_for;
-use crate::lang::output_vars::{OutputArgKind, OutputVarSpec, find_output_var};
+use crate::lang::output_vars::{OutputArgKind, find_terminal_output_var};
+use crate::lang::value_sets::values_of;
 use crate::state::document::Document;
 use crate::state::workspace::Workspace;
 use crate::syntax::ast::{Command, CommandKind, StatementKind, TextRange};
@@ -126,25 +127,11 @@ fn scope_at_cursor(document: &Document, scan: &LineScan) -> usize {
         StatementKind::Command(Command {
             kind: CommandKind::Subckt { .. },
             ..
-        }) => structure
-            .scopes
-            .iter()
-            .position(|scope| scope.subckt_statement == Some(index))
-            .unwrap_or_default(),
-        _ => structure
-            .statement_scope
-            .get(index)
-            .copied()
-            .unwrap_or_default(),
+        }) => structure.subckt_scope(index).unwrap_or_default(),
+        _ => structure.scope_of(index),
     };
     on_line
-        .map(|index| {
-            structure
-                .statement_scope
-                .get(index)
-                .copied()
-                .unwrap_or_default()
-        })
+        .map(|index| structure.scope_of(index))
         .or_else(|| preceding.map(scope_after))
         .unwrap_or_else(|| document.analysis.scope_at(scan.cursor))
 }
@@ -213,16 +200,6 @@ fn quote_proposal(env: Env, scan: &LineScan) -> Option<Proposal> {
     expression_proposal(env, scan)
 }
 
-/// Looks up an output variable by name, accepting a trailing terminal number (`i1`, `v2`).
-///
-/// # Arguments
-/// * `name` - call name as typed
-fn output_var(name: &str) -> Option<&'static OutputVarSpec> {
-    find_output_var(name).or_else(|| {
-        find_output_var(name.trim_end_matches(|character: char| character.is_ascii_digit()))
-    })
-}
-
 /// Proposes candidates inside an open parenthesis.
 ///
 /// # Arguments
@@ -231,12 +208,12 @@ fn output_var(name: &str) -> Option<&'static OutputVarSpec> {
 fn call_proposal(env: Env, scan: &LineScan) -> Option<Proposal> {
     let frame = scan.innermost();
     let first = scan.first_word();
-    let is_vi_line = first.starts_with(['v', 'i']);
     let name_start_offset = name_start(&env.document.text, scan.cursor).max(frame.open + 1);
-    if find_source_function(&frame.name).is_some() && is_vi_line && !scan.in_quote() {
+    if find_source_function(&frame.name).is_some() && is_source_element(&first) && !scan.in_quote()
+    {
         return expression_proposal(env, scan);
     }
-    match output_var(&frame.name).map(|spec| spec.argument) {
+    match find_terminal_output_var(&frame.name).map(|spec| spec.argument) {
         Some(OutputArgKind::Nodes) => {
             Some(Proposal::new(sources::nodes(env, "0"), name_start_offset))
         }
@@ -269,13 +246,16 @@ fn unnamed_call_proposal(env: Env, scan: &LineScan, first: &str) -> Option<Propo
     if first == ".model" && frame.name.is_empty() {
         return model_param_proposal(scan);
     }
+    if first == ".mosraprint" {
+        return Some(Proposal::new(
+            sources::element_names(env, &['m'], "0"),
+            name_start(&env.document.text, scan.cursor).max(frame.open + 1),
+        ));
+    }
     let expression = scan.in_quote()
         || user_function
         || find_function(&frame.name).is_some()
-        || matches!(
-            first,
-            ".param" | ".if" | ".elseif" | ".parameter" | ".parameters"
-        );
+        || is_expression_line(first);
     expression.then(|| expression_proposal(env, scan)).flatten()
 }
 
@@ -380,6 +360,31 @@ fn all_numeric(tokens: &[&line_context::Tok]) -> bool {
     })
 }
 
+/// Proposes values after `key=`: documented literals, `.data` blocks or expression names.
+///
+/// # Arguments
+/// * `env` - cursor environment
+/// * `scan` - scanned logical line
+/// * `command` - canonical command name
+/// * `key` - key in front of the `=`
+fn assignment_value_proposal(
+    env: Env,
+    scan: &LineScan,
+    command: &str,
+    key: &str,
+) -> Option<Proposal> {
+    let start = identifier_start(&env.document.text, scan.cursor);
+    if let Some(values) = values_of(command, key) {
+        return Some(Proposal::new(sources::literal_values(values), start));
+    }
+    if key.eq_ignore_ascii_case("data") && matches!(command, ".tran" | ".ac" | ".dc") {
+        return Some(Proposal::new(sources::data_blocks(env), start));
+    }
+    takes_expression_values(command)
+        .then(|| expression_proposal(env, scan))
+        .flatten()
+}
+
 /// Proposes candidates for the arguments of a dot command.
 ///
 /// # Arguments
@@ -391,10 +396,8 @@ fn command_proposal(env: Env, scan: &LineScan) -> Option<Proposal> {
     let start = scan.word_start();
     let positionals = scan.positionals();
     let n = positionals.len();
-    if current.contains('=') {
-        return takes_expression_values(command)
-            .then(|| expression_proposal(env, scan))
-            .flatten();
+    if let Some((key, _)) = current.split_once('=') {
+        return assignment_value_proposal(env, scan, command, key.trim());
     }
     let candidates = match command {
         ".option" => sources::options(!current.is_empty()),
@@ -420,7 +423,13 @@ fn command_proposal(env: Env, scan: &LineScan) -> Option<Proposal> {
         ".noise" | ".tf" | ".pz" if n == 1 => sources::element_names(env, &['v', 'i'], "0"),
         ".tran" | ".ac" | ".op" | ".noise" | ".sens" | ".four" | ".fft" | ".tf" | ".pz"
         | ".disto" => sources::analysis_keywords(),
-        ".if" | ".elseif" => return expression_proposal(env, scan),
+        ".if" | ".elseif" | ".temp" => return expression_proposal(env, scan),
+        ".ends" if n == 0 => sources::open_block_names(env, scan.line_start, BlockKind::Subckt),
+        ".endl" if n == 0 => sources::open_block_names(env, scan.line_start, BlockKind::LibSection),
+        ".mosraprint" if n == 1 => sources::mosraprint_types(),
+        ".appendmodel" if n.is_multiple_of(2) => sources::models(env, &[], "0"),
+        ".appendmodel" => sources::model_types(),
+        ".mosra_subckt_pin_volt" => sources::subckts(env, None),
         _ => return None,
     };
     Some(Proposal::new(candidates, start))
@@ -599,12 +608,11 @@ fn device_candidates(
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used)]
 mod tests {
     use ls_types::{CompletionItem, CompletionItemKind, CompletionTextEdit};
 
-    use super::test_support::{Opened, open, open_in_fixtures};
     use super::*;
+    use crate::test_support::{self, Opened, open, open_in_fixtures};
 
     fn complete(opened: &Opened) -> Vec<CompletionItem> {
         complete_triggered(opened, None)
@@ -856,6 +864,42 @@ mod tests {
         assert!(has(&found, "Vin") && has(&found, "p"));
         let found = labels("* t\nVin a 0 dc 1\nVx b 0 dc 1\n.dc Vin 0 1 0.1 |");
         assert!(has(&found, "Vx"));
+    }
+
+    #[test]
+    fn completes_documented_values_and_data_blocks() {
+        let found = labels("* t\n.option method=|");
+        assert_eq!(found, vec!["GEAR", "TRAP", "BDF"]);
+        assert!(has(&labels("* t\n.option runlvl=|"), "6"));
+        assert!(has(&labels("* t\n.mosra reltotaltime=1 simmode=|"), "3"));
+        assert!(has(&labels("* t\n.fft v(a) window=ha|"), "HANN"));
+        let found = labels("* t\n.data sw a\n1\n.enddata\n.tran 1n 10n sweep data=|");
+        assert_eq!(found, vec!["sw"]);
+    }
+
+    #[test]
+    fn completes_block_names_and_mosra_commands() {
+        assert_eq!(
+            labels("* t\n.subckt inv a b\nR1 a b 1\n.ends |"),
+            vec!["inv"]
+        );
+        assert_eq!(labels("* t\n.lib tt\n.param a=1\n.endl |"), vec!["tt"]);
+        assert!(has(&labels("* t\n.param t1=85\n.temp 25 |"), "t1"));
+        let models = "* t\n.model nch nmos level=54\n.model nra mosra level=1\n";
+        assert!(has(&labels(&format!("{models}.appendmodel |")), "nra"));
+        assert!(has(
+            &labels(&format!("{models}.appendmodel nra |")),
+            "MOSRA"
+        ));
+        assert!(has(&labels(&format!("{models}.mosraprint out |")), "DIDS("));
+        let found = labels(&format!("{models}M1 d g 0 0 nch\n.mosraprint out ids(|"));
+        assert!(has(&found, "M1"));
+        assert!(has(
+            &labels("* t\n.subckt wrap d g s b\n.ends\n.mosra_subckt_pin_volt |"),
+            "wrap"
+        ));
+        let found = labels("* t\n.meas fft s |");
+        assert!(has(&found, "SFDR") && has(&found, "MINFREQ="));
     }
 
     #[test]

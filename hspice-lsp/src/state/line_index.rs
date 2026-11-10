@@ -120,12 +120,6 @@ impl LineIndex {
         )
     }
 
-    /// Returns the number of lines (a trailing newline starts a final empty line).
-    #[cfg(test)]
-    pub fn line_count(&self) -> usize {
-        self.line_starts.len()
-    }
-
     /// Returns the zero-based line containing `offset` (clamped to the last line).
     ///
     /// # Arguments
@@ -184,7 +178,7 @@ mod tests {
     #[test]
     fn empty_text() {
         let index = LineIndex::new("");
-        assert_eq!(index.line_count(), 1);
+        assert_eq!(index.line_starts.len(), 1);
         assert_eq!(index.position("", 0, Utf16), pos(0, 0));
         assert_eq!(index.position("", 10, Utf16), pos(0, 0));
         assert_eq!(index.offset("", pos(3, 3), Utf16), 0);
@@ -195,7 +189,7 @@ mod tests {
     fn trailing_newline_adds_empty_line() {
         let text = "a\n";
         let index = LineIndex::new(text);
-        assert_eq!(index.line_count(), 2);
+        assert_eq!(index.line_starts.len(), 2);
         assert_eq!(index.position(text, 2, Utf8), pos(1, 0));
         assert_eq!(index.offset(text, pos(1, 0), Utf8), 2);
         assert_eq!(index.offset(text, pos(2, 0), Utf8), 2);
@@ -237,7 +231,7 @@ mod tests {
     fn crlf_lines() {
         let text = "ab\r\ncd\r\n";
         let index = LineIndex::new(text);
-        assert_eq!(index.line_count(), 3);
+        assert_eq!(index.line_starts.len(), 3);
         assert_eq!(index.position(text, 4, Utf8), pos(1, 0));
         assert_eq!(index.offset(text, pos(0, 99), Utf8), 2);
         assert_eq!(index.offset(text, pos(1, 99), Utf8), 6);

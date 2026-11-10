@@ -84,7 +84,7 @@
         "hspice.diagnostics.unknownOptions": {
           "type": "boolean",
           "default": true,
-          "description": "Report unknown .option names and .MOSRA parameters."
+          "description": "Report unknown .option names, .MOSRA parameters and undocumented values."
         },
         "hspice.diagnostics.megSuffix": {
           "type": "boolean",

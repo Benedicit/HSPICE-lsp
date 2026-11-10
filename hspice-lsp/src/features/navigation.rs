@@ -8,9 +8,11 @@ use ls_types::{
     PrepareRenameResponse, Range, TextEdit, Uri, WorkspaceEdit,
 };
 
-use super::{symbol_location, to_lsp_range, to_offset};
+use super::{is_token_delimiter, symbol_location, to_lsp_range, to_offset};
 use crate::analysis::includes::{read_source, summarize};
-use crate::analysis::symbols::{Origin, ROOT_SCOPE, ScopeId, Symbol, SymbolId, SymbolKind};
+use crate::analysis::symbols::{
+    Origin, ROOT_SCOPE, ScopeId, Symbol, SymbolId, SymbolKind, bin_base,
+};
 use crate::analysis::{ExternalContext, IncludeResolution, analyze};
 use crate::lang::elements::is_ground;
 use crate::lang::functions::{find_function, find_special_variable};
@@ -50,16 +52,6 @@ struct Occurrence {
     range: Range,
     old: String,
     definition: bool,
-}
-
-/// Returns the base name of a binned model such as `nch.12`.
-///
-/// # Arguments
-/// * `key` - lowercase model name
-fn bin_base(key: &str) -> Option<String> {
-    let (base, bin) = key.rsplit_once('.')?;
-    (!base.is_empty() && !bin.is_empty() && bin.chars().all(|c| c.is_ascii_digit()))
-        .then(|| base.to_string())
 }
 
 /// Returns the file that defines a symbol.
@@ -127,9 +119,7 @@ fn symbol_target(document: &Document, offset: usize) -> Option<Target> {
     let base = (symbol.kind == SymbolKind::Model)
         .then(|| bin_base(&symbol.name.key))
         .flatten();
-    let local_ids = base
-        .as_deref()
-        .map_or_else(|| vec![id], |base| analysis.table.bins(base).to_vec());
+    let local_ids = base.map_or_else(|| vec![id], |base| analysis.table.bins(base).to_vec());
     let keys: Vec<String> = local_ids
         .iter()
         .filter_map(|member| analysis.symbols.get(*member))
@@ -138,7 +128,7 @@ fn symbol_target(document: &Document, offset: usize) -> Option<Target> {
     Some(Target {
         kind: symbol.kind,
         keys,
-        binned_base: base,
+        binned_base: base.map(str::to_string),
         cursor,
         scope: symbol.scope,
         global: symbol.scope == ROOT_SCOPE && GLOBAL_KINDS.contains(&symbol.kind),
@@ -616,13 +606,12 @@ fn no_target_message(document: &Document, offset: usize) -> String {
 /// * `text` - document text
 /// * `offset` - byte offset
 fn word_at(text: &str, offset: usize) -> String {
-    let is_delimiter = |c: char| c.is_whitespace() || ",=()'\"".contains(c);
     let offset = offset.min(text.len());
     let start = text[..offset]
-        .rfind(is_delimiter)
+        .rfind(is_token_delimiter)
         .map_or(0, |index| index + 1);
     let end = text[offset..]
-        .find(is_delimiter)
+        .find(is_token_delimiter)
         .map_or(text.len(), |index| offset + index);
     text.get(start..end).unwrap_or_default().to_string()
 }
@@ -646,10 +635,7 @@ fn validate_new_name(
         .chars()
         .next()
         .ok_or("The new name must not be empty")?;
-    if name
-        .chars()
-        .any(|c| c.is_whitespace() || ",=()'\"".contains(c))
-    {
+    if name.chars().any(is_token_delimiter) {
         return Err("The new name must not contain whitespace or any of , = ( ) ' \"".to_string());
     }
     if "*+$.".contains(first) {
@@ -672,20 +658,10 @@ fn validate_new_name(
     let base_name = target
         .binned_base
         .as_ref()
-        .map_or(name.to_string(), |_| strip_bin(name));
+        .map_or(name, |_| bin_base(name).unwrap_or(name))
+        .to_string();
     check_collision(document, target, &base_name)?;
     Ok(base_name)
-}
-
-/// Removes a trailing `.N` bin suffix from a name.
-///
-/// # Arguments
-/// * `name` - model name as typed
-fn strip_bin(name: &str) -> String {
-    bin_base(&name.to_ascii_lowercase())
-        .and_then(|base| name.get(..base.len()))
-        .unwrap_or(name)
-        .to_string()
 }
 
 /// Rejects names that already exist in the same scope.
@@ -703,7 +679,7 @@ fn check_collision(document: &Document, target: &Target, name: &str) -> Result<(
             !table.bins(&key).is_empty()
                 && !old_keys
                     .iter()
-                    .any(|old| bin_base(old).as_deref() == Some(key.as_str()))
+                    .any(|old| bin_base(old) == Some(key.as_str()))
         }
         None => {
             !old_keys.contains(&key.as_str())
@@ -733,16 +709,12 @@ fn replacement(target: &Target, old: &str, name: &str) -> String {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::config::Settings;
     use crate::state::line_index::PositionEncoding;
+    use crate::test_support::{fixtures, open_fixture};
     use std::str::FromStr;
-
-    fn fixtures() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
-    }
 
     fn workspace_with_root(root: Option<PathBuf>) -> Workspace {
         Workspace::new(root, PositionEncoding::Utf16, Settings::default())
@@ -751,14 +723,6 @@ mod tests {
     fn open_text(workspace: &mut Workspace, uri: &str, text: &str) -> Uri {
         let uri = Uri::from_str(uri).expect("uri");
         workspace.update(uri.clone(), 1, text.to_string());
-        uri
-    }
-
-    fn open_fixture(workspace: &mut Workspace, relative: &str) -> Uri {
-        let path = fixtures().join(relative);
-        let text = std::fs::read_to_string(&path).unwrap_or_default();
-        let uri = Uri::from_file_path(&path).expect("file uri");
-        workspace.update(uri.clone(), 1, text);
         uri
     }
 
@@ -1064,7 +1028,5 @@ mod tests {
         };
         assert_eq!(replacement(&target, "NCH.12", "new"), "new.12");
         assert_eq!(replacement(&target, "nch", "new"), "new");
-        assert_eq!(strip_bin("New.3"), "New");
-        assert_eq!(strip_bin("New"), "New");
     }
 }

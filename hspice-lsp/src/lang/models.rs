@@ -682,17 +682,12 @@ mod tests {
             );
         }
         assert!(MOSFET_MODEL_PARAMS.len() >= 50);
-        assert_eq!(MOSRA_MODEL_PARAMS.len(), 94);
+        assert_eq!(MOSRA_MODEL_PARAMS.len(), 98);
     }
 
     #[test]
     fn model_type_names_are_unique_and_lowercase() {
-        let names: HashSet<&str> = MODEL_TYPES.iter().map(|m| m.name).collect();
-        assert_eq!(names.len(), MODEL_TYPES.len());
-        assert!(
-            MODEL_TYPES
-                .iter()
-                .all(|m| m.name == m.name.to_ascii_lowercase() && !m.description.is_empty())
-        );
+        crate::lang::assert_unique_lowercase(MODEL_TYPES);
+        assert!(MODEL_TYPES.iter().all(|m| !m.description.is_empty()));
     }
 }

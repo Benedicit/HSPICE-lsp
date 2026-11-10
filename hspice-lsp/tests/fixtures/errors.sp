@@ -137,6 +137,42 @@ Rnm1 a b 1k
 Rnm2 a b 2k
 .ends other $ expect: ends-name-mismatch
 
+* case: shorted-element, missing-value, bad-multiplier, large-value
+Rsh n1 n1 1k $ expect: shorted-element
+Rmv n1 0 $ expect: missing-value
+Rbm n1 0 1k m=0 $ expect: bad-multiplier
+Clv n1 0 1 $ expect: large-value
+
+* case: source-args (PWL time goes backwards)
+Vsa n1 0 PWL(0 0 2n 1 1n 0) $ expect: source-args
+
+* case: undefined-data
+.tran data=nodata $ expect: undefined-data
+
+* case: duplicate-ic and empty-command
+.ic v(n1)=0
+.ic v(n1)=1 $ expect: duplicate-ic
+.nodeset $ expect: empty-command
+
+* case: invalid-value and runlvl-ignored-option
+.option method=euler $ expect: invalid-value
+.option trtol=7 $ expect: runlvl-ignored-option
+
+* case: output-signal-param
+.param osp='v(n1)*2' $ expect: output-signal-param
+Rosp n1 0 'osp+1k'
+
+* case: measure-keyword-param
+.param td=1n
+Rtd n1 0 'td*1e12'
+.meas tran mkp avg v(n1) from=0 to=td $ expect: measure-keyword-param
+
+* case: misplaced-else
+.if (1)
+.else
+.elseif (0) $ expect: misplaced-else
+.endif
+
 * case: mosra-model-in-alter (every later case lies in this .alter section)
 .alter aged
 .model nra mosra level=1 $ expect: mosra-model-in-alter

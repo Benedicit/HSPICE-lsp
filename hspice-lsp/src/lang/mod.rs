@@ -9,6 +9,7 @@ pub mod mosra;
 pub mod mosra_model;
 pub mod options;
 pub mod output_vars;
+pub mod value_sets;
 
 /// How common a construct is in course netlists; used to rank completion items.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -54,6 +55,11 @@ pub trait Named {
     fn aliases(&self) -> &'static [&'static str] {
         &[]
     }
+
+    /// Name followed by its aliases.
+    fn spellings(&self) -> impl Iterator<Item = &'static str> {
+        std::iter::once(self.name()).chain(self.aliases().iter().copied())
+    }
 }
 
 impl Named for KeywordSpec {
@@ -73,8 +79,20 @@ impl Named for KeywordSpec {
 /// * `name` - name as written in the netlist
 pub fn find_named<T: Named>(table: &'static [T], name: &str) -> Option<&'static T> {
     table.iter().find(|entry| {
-        std::iter::once(entry.name())
-            .chain(entry.aliases().iter().copied())
+        entry
+            .spellings()
             .any(|candidate| candidate.eq_ignore_ascii_case(name))
     })
+}
+
+/// Asserts that the names and aliases of a table are lowercase and unique.
+///
+/// # Arguments
+/// * `table` - table to check
+#[cfg(test)]
+pub fn assert_unique_lowercase<T: Named>(table: &[T]) {
+    let names: Vec<&str> = table.iter().flat_map(Named::spellings).collect();
+    let unique: std::collections::HashSet<&str> = names.iter().copied().collect();
+    assert_eq!(names.len(), unique.len());
+    assert!(names.iter().all(|name| *name == name.to_ascii_lowercase()));
 }

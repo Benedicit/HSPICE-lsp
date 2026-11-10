@@ -10,6 +10,7 @@ mod nodes;
 mod numbers;
 mod params;
 mod references;
+mod source_functions;
 mod structure;
 mod walk;
 
@@ -104,10 +105,12 @@ pub fn compute(
         .chain(include_diagnostics(analysis))
         .chain(structure::check(syntax, analysis))
         .chain(references::check(syntax, analysis))
-        .chain(elements::check(analysis))
+        .chain(elements::check(syntax, analysis))
         .chain(functions::check(syntax, analysis))
+        .chain(source_functions::check(syntax, analysis))
         .chain(nodes::no_ground(syntax, analysis))
         .chain(nodes::undefined_output_targets(syntax, analysis))
+        .chain(nodes::duplicate_initial_conditions(syntax, analysis))
         .chain(floating)
         .chain(commands::check(syntax, analysis, settings))
         .chain(analyses::check(syntax, analysis))

@@ -1,5 +1,4 @@
 [package]
-authors = [ "" ]
 autoexamples = false
 categories = [ "parser-implementations", "parsing", "text-editors" ]
 description = "HSPICE netlist grammar for tree-sitter"
@@ -7,12 +6,11 @@ edition = "2024"
 keywords = [ "incremental", "parsing", "tree-sitter", "hspice" ]
 license = "MIT"
 name = "tree-sitter-hspice"
-readme = "README.md"
-repository = "https://github.com/local/hspice.nvim"
+repository = "https://github.com/Benedicit/HSPICE-lsp"
 version = "0.1.0"
 
 build = "bindings/rust/build.rs"
-include = [ "bindings/rust/*", "grammar.js", "queries/*", "src/*", "tree-sitter.json", "/LICENSE" ]
+include = [ "bindings/rust/*", "grammar.js", "src/*", "tree-sitter.json" ]
 
 [lib]
 path = "bindings/rust/lib.rs"

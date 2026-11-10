@@ -28,7 +28,7 @@ pub struct DiagnosticSettings {
     pub floating_nodes: bool,
     /// Hint about parameters that are never used.
     pub unused_params: bool,
-    /// Warn about unknown `.option` names and `.mosra` parameters.
+    /// Warn about unknown `.option` names, `.mosra` parameters and undocumented `key=value` values.
     pub unknown_options: bool,
     /// Hint when `M` (milli) is probably meant as `MEG`.
     pub meg_suffix: bool,

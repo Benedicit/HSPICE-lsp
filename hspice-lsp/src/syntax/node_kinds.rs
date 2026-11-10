@@ -1,18 +1,11 @@
-//! Node-kind and field-name constants of the tree-sitter-hspice grammar.
-//!
-//! The list mirrors the whole grammar (verified by the tests below), so not every kind is referenced.
-#![allow(dead_code)]
+//! Node-kind and field-name constants of the tree-sitter-hspice grammar (checked against it by the tests below).
 
-/// Root node.
-pub const SOURCE_FILE: &str = "source_file";
 /// `*` comment line.
 pub const COMMENT: &str = "comment";
 /// `$` comment.
 pub const INLINE_COMMENT: &str = "inline_comment";
 /// `+` continuation (extra).
 pub const LINE_CONTINUATION: &str = "line_continuation";
-/// `\` continuation (extra).
-pub const BACKSLASH_CONTINUATION: &str = "backslash_continuation";
 /// `.include` statement.
 pub const INCLUDE_COMMAND: &str = "include_command";
 /// `.lib` statement.
@@ -51,10 +44,6 @@ pub const HDL_COMMAND: &str = "hdl_command";
 pub const GENERIC_COMMAND: &str = "generic_command";
 /// Element line.
 pub const ELEMENT: &str = "element";
-/// Element name token.
-pub const ELEMENT_NAME: &str = "element_name";
-/// Dot-command keyword token.
-pub const COMMAND_NAME: &str = "command_name";
 /// `key=value` argument.
 pub const ASSIGNMENT: &str = "assignment";
 /// `file=path` argument.
@@ -73,8 +62,6 @@ pub const PATH_WORD: &str = "path_word";
 pub const STRING: &str = "string";
 /// `name=value` inside `.param`.
 pub const PARAM_DEFINITION: &str = "param_definition";
-/// `(a, b)` formal arguments of a user function.
-pub const PARAMETER_LIST: &str = "parameter_list";
 /// `'…'` or `"…"` expression.
 pub const QUOTED_EXPRESSION: &str = "quoted_expression";
 /// Binary operation.
@@ -91,8 +78,6 @@ pub const PARENTHESIZED_EXPRESSION: &str = "parenthesized_expression";
 pub const IDENTIFIER: &str = "identifier";
 /// `key=(v1 v2 …)` or `key=list(…)` value.
 pub const VALUE_LIST: &str = "value_list";
-/// Free text of `.title` / `.alter`.
-pub const TEXT: &str = "text";
 
 /// Field holding a statement keyword or element name.
 pub const FIELD_NAME: &str = "name";
@@ -147,11 +132,9 @@ mod tests {
     fn every_named_kind_exists_in_the_grammar() {
         let language: tree_sitter::Language = tree_sitter_hspice::LANGUAGE.into();
         let kinds = [
-            SOURCE_FILE,
             COMMENT,
             INLINE_COMMENT,
             LINE_CONTINUATION,
-            BACKSLASH_CONTINUATION,
             INCLUDE_COMMAND,
             LIB_COMMAND,
             PARAM_COMMAND,
@@ -171,8 +154,6 @@ mod tests {
             HDL_COMMAND,
             GENERIC_COMMAND,
             ELEMENT,
-            ELEMENT_NAME,
-            COMMAND_NAME,
             ASSIGNMENT,
             FILE_ASSIGNMENT,
             CALL,
@@ -182,7 +163,6 @@ mod tests {
             PATH_WORD,
             STRING,
             PARAM_DEFINITION,
-            PARAMETER_LIST,
             QUOTED_EXPRESSION,
             BINARY_EXPRESSION,
             UNARY_EXPRESSION,
@@ -191,7 +171,6 @@ mod tests {
             PARENTHESIZED_EXPRESSION,
             IDENTIFIER,
             VALUE_LIST,
-            TEXT,
         ];
         let missing: Vec<&str> = kinds
             .into_iter()

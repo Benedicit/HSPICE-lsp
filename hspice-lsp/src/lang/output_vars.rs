@@ -454,11 +454,22 @@ pub fn find_output_var(name: &str) -> Option<&'static OutputVarSpec> {
     let lowercase = name.to_ascii_lowercase();
     let without_digits = lowercase.trim_end_matches(|character: char| character.is_ascii_digit());
     OUTPUT_VARS.iter().find(|spec| {
-        let names = || std::iter::once(spec.name).chain(spec.aliases.iter().copied());
-        names().any(|candidate| candidate == lowercase)
+        spec.spellings().any(|candidate| candidate == lowercase)
             || (spec.numbered
                 && without_digits.len() < lowercase.len()
-                && names().any(|candidate| candidate == without_digits))
+                && spec
+                    .spellings()
+                    .any(|candidate| candidate == without_digits))
+    })
+}
+
+/// Looks up an output variable, accepting a terminal number on any name (`v2`, `i1`).
+///
+/// # Arguments
+/// * `name` - function name as written
+pub fn find_terminal_output_var(name: &str) -> Option<&'static OutputVarSpec> {
+    find_output_var(name).or_else(|| {
+        find_output_var(name.trim_end_matches(|character: char| character.is_ascii_digit()))
     })
 }
 
@@ -479,7 +490,7 @@ pub fn output_argument(name: &str) -> Option<OutputArgKind> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
+    use crate::lang::assert_unique_lowercase;
 
     #[test]
     fn finds_plain_and_numbered_forms() {
@@ -506,14 +517,11 @@ mod tests {
 
     #[test]
     fn table_invariants() {
-        let names: Vec<&str> = OUTPUT_VARS.iter().map(|v| v.name).collect();
-        assert_eq!(names.len(), names.iter().collect::<HashSet<_>>().len());
+        assert_unique_lowercase(OUTPUT_VARS);
         assert!(
             OUTPUT_VARS
                 .iter()
-                .all(|v| v.name == v.name.to_ascii_lowercase()
-                    && !v.signature.is_empty()
-                    && !v.description.is_empty())
+                .all(|v| !v.signature.is_empty() && !v.description.is_empty())
         );
     }
 }

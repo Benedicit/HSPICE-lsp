@@ -3,8 +3,9 @@
 use ls_types::{InlayHint, InlayHintKind, InlayHintLabel, Range};
 
 use super::to_offset;
+use crate::analysis::roles::source_calls;
 use crate::analysis::symbols::{SymbolDetail, SymbolKind};
-use crate::lang::elements::{ElementSpec, find_source_function};
+use crate::lang::elements::ElementSpec;
 use crate::state::document::Document;
 use crate::state::workspace::Workspace;
 use crate::syntax::ast::{Arg, Element, Ident, StatementKind, Value};
@@ -167,41 +168,20 @@ fn candidate<'a>(document: &'a Document, node: &Ident, label: String) -> Candida
 /// * `document` - analysed document
 /// * `element` - lowered element line
 fn source_candidates<'a>(document: &'a Document, element: &Element) -> Vec<Candidate<'a>> {
-    let named_args = |function: &'static crate::lang::elements::SourceFunctionSpec,
-                      args: Vec<&Value>| {
-        args.into_iter()
-            .zip(function.arguments.iter().map(|argument| argument.name))
-            .map(|(value, name)| Candidate {
-                offset: value.range().start,
-                label: format!("{name}:"),
-                annotated: document.slice(value.range()),
-            })
-            .collect::<Vec<_>>()
-    };
-    let mut candidates = Vec::new();
-    for (index, arg) in element.args.iter().enumerate() {
-        match arg {
-            Arg::Value(Value::Call(call)) => {
-                let Some(function) = find_source_function(&call.name.key) else {
-                    continue;
-                };
-                let values = call.args.iter().map_while(plain_value).collect();
-                candidates.extend(named_args(function, values));
-            }
-            Arg::Value(Value::Word(word)) => {
-                let Some(function) = find_source_function(&word.key) else {
-                    continue;
-                };
-                let values = element.args[index + 1..]
-                    .iter()
-                    .map_while(plain_value)
-                    .collect();
-                candidates.extend(named_args(function, values));
-            }
-            _ => {}
-        }
-    }
-    candidates
+    source_calls(element)
+        .into_iter()
+        .flat_map(|call| {
+            call.args
+                .iter()
+                .map_while(plain_value)
+                .zip(call.function.arguments)
+                .map(|(value, argument)| Candidate {
+                    offset: value.range().start,
+                    label: format!("{}:", argument.name),
+                    annotated: document.slice(value.range()),
+                })
+        })
+        .collect()
 }
 
 /// Returns the value of a positional numeric or expression argument.
@@ -217,7 +197,6 @@ fn plain_value(arg: &Arg) -> Option<&Value> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
     use std::str::FromStr;
 
     use ls_types::{Position, Uri};
@@ -253,7 +232,7 @@ mod tests {
 
     #[test]
     fn fixture_instance_gets_port_names() {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let root = crate::test_support::fixtures();
         let mut workspace = Workspace::new(
             Some(root.clone()),
             PositionEncoding::Utf16,

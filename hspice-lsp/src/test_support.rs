@@ -1,4 +1,4 @@
-//! Helpers shared by the unit tests of completion, hover and signature help.
+//! Helpers shared by the unit tests.
 
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -59,6 +59,19 @@ pub fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("fixtures")
+}
+
+/// Opens a fixture file in a workspace.
+///
+/// # Arguments
+/// * `workspace` - workspace to open the file in
+/// * `relative` - path below `tests/fixtures`
+pub fn open_fixture(workspace: &mut Workspace, relative: &str) -> Uri {
+    let path = fixtures().join(relative);
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    let uri = Uri::from_file_path(&path).expect("file uri");
+    workspace.update(uri.clone(), 1, text);
+    uri
 }
 
 /// Opens a marked document located inside the fixtures directory.

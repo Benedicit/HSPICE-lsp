@@ -175,7 +175,6 @@ fn statement_folds(document: &Document) -> impl Iterator<Item = Fold> + '_ {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
     use std::str::FromStr;
 
     use ls_types::Uri;
@@ -260,7 +259,7 @@ mod tests {
 
     #[test]
     fn fixture_include_folds_its_subckt() {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let root = crate::test_support::fixtures();
         let mut workspace = Workspace::new(
             Some(root.clone()),
             PositionEncoding::Utf16,

@@ -273,20 +273,16 @@ pub fn workspace_symbols(workspace: &Workspace, query: &str) -> Option<Workspace
 /// # Arguments
 /// * `symbol` - local symbol
 fn workspace_kind(symbol: &Symbol) -> Option<LspSymbolKind> {
-    let is_data_column = matches!(
-        symbol.detail,
-        SymbolDetail::Param {
-            source: ParamSource::DataColumn,
-            ..
-        }
-    );
-    match symbol.kind {
-        SymbolKind::Subckt | SymbolKind::Model | SymbolKind::LibSection | SymbolKind::Function => {
-            outline_kind(symbol)
-        }
-        SymbolKind::Param if !is_data_column => outline_kind(symbol),
-        _ => None,
-    }
+    matches!(
+        symbol.kind,
+        SymbolKind::Subckt
+            | SymbolKind::Model
+            | SymbolKind::LibSection
+            | SymbolKind::Function
+            | SymbolKind::Param
+    )
+    .then(|| outline_kind(symbol))
+    .flatten()
 }
 
 /// Builds the flat workspace symbol entry for a symbol.
@@ -330,7 +326,6 @@ fn symbol_information(
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
     use std::str::FromStr;
 
     use ls_types::Uri;
@@ -416,7 +411,7 @@ mod tests {
 
     #[test]
     fn fixture_outline_has_subckt() {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let root = crate::test_support::fixtures();
         let mut workspace = Workspace::new(
             Some(root.clone()),
             PositionEncoding::Utf16,

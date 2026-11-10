@@ -22,8 +22,13 @@ Everything is based solely upon publicly available manuals/reference sheets onli
   - nodes and elements in output variables that do not exist (`.print v(out)`, `i(R1)`, `v(x1.out)`)
   - unknown, obsolete or foreign-dialect commands and options, unknown `.MOSRA` parameters
   - `.MOSRA` combined with `SWEEP`/`MONTE`, `.DC`/`.AC` (both need `SIMMODE=1`) or no `.TRAN`, and MOSRA models changed in `.ALTER`
-  - `10M` vs `10MEG`, unused parameters
-- **Completion**: dot commands and element templates (snippets, HSPICE keywords in uppercase), subckts, models matching the element type, nodes, parameters, functions, instance/model parameters, source functions, `.option` names, analysis and `.measure` keywords, output variables, include paths and `.lib` sections.
+  - `10M` vs `10MEG`, unused parameters, capacitors of 1 F or inductors of 0.1 H and more
+  - values outside the documented set (`.option method=`, `.MOSRA simmode=`, `.fft window=` ...), options that RUNLVL ignores
+  - shorted two-terminal elements, R/C/L without value, multipliers `M<=0`
+  - source functions: too few arguments, negative times, PWL time points that go backwards
+  - `data=` without `.data` block, nodes initialised twice by `.ic`/`.nodeset`, `.print`/`.probe`/`.ic` without arguments
+  - output signals `v()`/`i()` in `.param` or `.measure PARAM=`, `.measure` keywords used as parameter names, `.elseif`/`.else` after `.else`
+- **Completion**: dot commands and element templates (snippets, HSPICE keywords in uppercase), subckts, models matching the element type, nodes, parameters, functions, instance/model parameters, source functions, `.option` names, analysis and `.measure` keywords, output variables, include paths and `.lib` sections, documented values after `key=`, `.data` names after `data=`, the block name after `.ends`/`.endl`, and the arguments of `.mosraprint`, `.appendmodel` and `.mosra_subckt_pin_volt`.
 - **Hover**: command synopses with argument descriptions, element terminal mapping, parameter values (evaluated), subckt and model cards, node connections, number values (`10M` = 1e-2).
 - **Navigation**: go to definition (including into `.include`/`.lib` files and all model bins), find references, document highlight, rename.
 - **Structure**: document and workspace symbols, folding ranges (comment runs only with `folding.comments`, `+` continued statements only with `folding.continuations`).
@@ -113,7 +118,7 @@ Settings are sent as `initializationOptions` and as `settings.hspice` in `worksp
 | `includePaths` | `{}` | Extra directories searched for `.include` and `.lib` files |
 | `diagnostics.floatingNodes` | `true` | Report nodes connected to a single terminal |
 | `diagnostics.unusedParams` | `true` | Report unused `.param` definitions |
-| `diagnostics.unknownOptions` | `true` | Report unknown `.option` names and `.MOSRA` parameters |
+| `diagnostics.unknownOptions` | `true` | Report unknown `.option` names, `.MOSRA` parameters and undocumented values |
 | `diagnostics.megSuffix` | `true` | Report suspicious `m`/`meg` suffix use |
 | `inlayHints.ports` | `true` | Show port names on subcircuit instances |
 | `inlayHints.sourceArgs` | `true` | Show argument names on source instances |

@@ -20,6 +20,27 @@ pub enum BlockKind {
     Variation,
     /// `.design_exploration` … `.end_design_exploration`.
     DesignExploration,
+    /// `.module` … `.endmodule` (3D-IC module).
+    Module,
+    /// `.modulevar` … `.endmodulevar` (3D-IC module properties).
+    ModuleVar,
+}
+
+impl BlockKind {
+    /// Returns the opening and closing keywords.
+    pub fn keywords(self) -> (&'static str, &'static str) {
+        match self {
+            BlockKind::Subckt => (".subckt", ".ends"),
+            BlockKind::LibSection => (".lib", ".endl"),
+            BlockKind::If => (".if", ".endif"),
+            BlockKind::Data => (".data", ".enddata"),
+            BlockKind::Protect => (".protect", ".unprotect"),
+            BlockKind::Variation => (".variation", ".end_variation"),
+            BlockKind::DesignExploration => (".design_exploration", ".end_design_exploration"),
+            BlockKind::Module => (".module", ".endmodule"),
+            BlockKind::ModuleVar => (".modulevar", ".endmodulevar"),
+        }
+    }
 }
 
 /// One block with its opening and (optional) closing statement.
@@ -60,6 +81,37 @@ pub struct Structure {
     pub unmatched: Vec<usize>,
 }
 
+impl Structure {
+    /// Returns true if the semantics of a statement are skipped.
+    ///
+    /// # Arguments
+    /// * `statement` - statement index
+    pub fn is_skipped(&self, statement: usize) -> bool {
+        self.skipped.get(statement).copied().unwrap_or(false)
+    }
+
+    /// Returns the scope of a statement.
+    ///
+    /// # Arguments
+    /// * `statement` - statement index
+    pub fn scope_of(&self, statement: usize) -> ScopeId {
+        self.statement_scope
+            .get(statement)
+            .copied()
+            .unwrap_or(ROOT_SCOPE)
+    }
+
+    /// Returns the scope opened by a `.subckt` statement.
+    ///
+    /// # Arguments
+    /// * `statement` - statement index of the `.subckt`
+    pub fn subckt_scope(&self, statement: usize) -> Option<ScopeId> {
+        self.scopes
+            .iter()
+            .position(|scope| scope.subckt_statement == Some(statement))
+    }
+}
+
 /// Role of a statement in the block structure.
 enum BlockRole {
     Open(BlockKind, Option<Ident>),
@@ -92,6 +144,18 @@ fn block_role(command: &Command) -> BlockRole {
     }
 }
 
+/// Returns the block kind a command closes or continues (`.ends`, `.else` ...).
+///
+/// # Arguments
+/// * `command` - lowered dot command
+pub fn closed_kind(command: &Command) -> Option<BlockKind> {
+    match block_role(command) {
+        BlockRole::Close(kind, _) => Some(kind),
+        BlockRole::Branch => Some(BlockKind::If),
+        _ => None,
+    }
+}
+
 /// Classifies generic commands that open or close blocks.
 ///
 /// # Arguments
@@ -108,6 +172,10 @@ fn generic_block_role(keyword: &str, args: &[Arg]) -> BlockRole {
         ".end_variation" => BlockRole::Close(BlockKind::Variation, None),
         ".design_exploration" => BlockRole::Open(BlockKind::DesignExploration, None),
         ".end_design_exploration" => BlockRole::Close(BlockKind::DesignExploration, None),
+        ".module" => BlockRole::Open(BlockKind::Module, first_word(args)),
+        ".endmodule" => BlockRole::Close(BlockKind::Module, None),
+        ".modulevar" => BlockRole::Open(BlockKind::ModuleVar, first_word(args)),
+        ".endmodulevar" => BlockRole::Close(BlockKind::ModuleVar, None),
         _ => BlockRole::None,
     }
 }

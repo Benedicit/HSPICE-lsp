@@ -112,6 +112,12 @@ fn check_unresolved(
             "undefined-source",
             sweep_message(syntax, reference),
         )),
+        (RefContext::DataRef, _) => Some(lenient(
+            analysis,
+            range,
+            "undefined-data",
+            format!("Data block `{text}` is not defined"),
+        )),
         _ => None,
     }
 }

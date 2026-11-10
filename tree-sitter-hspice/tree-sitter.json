@@ -15,7 +15,7 @@
     "version": "0.1.0",
     "license": "MIT",
     "description": "HSPICE netlist grammar for tree-sitter",
-    "links": { "repository": "https://github.com/local/hspice.nvim" }
+    "links": { "repository": "https://github.com/Benedicit/HSPICE-lsp" }
   },
   "bindings": {
     "c": false, "go": false, "java": false, "kotlin": false, "node": false,

@@ -639,7 +639,7 @@ impl Workspace {
     /// # Arguments
     /// * `netlist` - analysed document (for `.option search`)
     /// * `base_dir` - directory of the analysed document
-    fn search_dirs(&self, netlist: &Netlist, base_dir: &Path) -> Vec<PathBuf> {
+    pub fn search_dirs(&self, netlist: &Netlist, base_dir: &Path) -> Vec<PathBuf> {
         let option_dirs = option_search_dirs(netlist).into_iter().map(|dir| {
             let expanded = PathBuf::from(expand_path(&dir, &|name| std::env::var(name).ok()));
             if expanded.is_absolute() {
@@ -775,19 +775,10 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
+    use crate::test_support::{fixtures, open_fixture};
 
     fn fixture(relative: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures")
-            .join(relative)
-    }
-
-    fn open_fixture(workspace: &mut Workspace, relative: &str) -> Uri {
-        let path = fixture(relative);
-        let text = std::fs::read_to_string(&path).unwrap_or_default();
-        let uri = Uri::from_file_path(&path).expect("file uri");
-        workspace.update(uri.clone(), 1, text);
-        uri
+        fixtures().join(relative)
     }
 
     #[test]

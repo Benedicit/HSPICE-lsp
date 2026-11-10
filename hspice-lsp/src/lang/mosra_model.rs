@@ -1,4 +1,4 @@
-//! Level 1 MOSRA (HCI/BTI reliability) model-card parameters, HSPICE User Guide E-2010.12 tables 77-79.
+//! Level 1 MOSRA (HCI/BTI reliability) model-card parameters, HSPICE User Guide H-2013.03 tables 70-72.
 
 use super::models::ModelParamSpec;
 
@@ -125,6 +125,16 @@ pub static MOSRA_MODEL_PARAMS: &[ModelParamSpec] = &[
         description: "Duty cycle dependent exponent for transient Vth degradation (0 or negative)",
     },
     ModelParamSpec {
+        name: "tfc",
+        default: Some("0"),
+        description: "Frequency dependence coefficient for BTI recovery of Vth",
+    },
+    ModelParamSpec {
+        name: "tfe",
+        default: Some("0"),
+        description: "Frequency dependence exponent for BTI recovery of Vth",
+    },
+    ModelParamSpec {
         name: "totde",
         default: Some("1"),
         description: "Drain voltage exponent for the oxide electric field in Vth degradation",
@@ -248,6 +258,16 @@ pub static MOSRA_MODEL_PARAMS: &[ModelParamSpec] = &[
         name: "udcd",
         default: Some("0"),
         description: "Duty cycle dependent coefficient for transient mobility degradation (0 or negative)",
+    },
+    ModelParamSpec {
+        name: "ufc",
+        default: Some("0"),
+        description: "Frequency dependence coefficient for BTI recovery of mobility",
+    },
+    ModelParamSpec {
+        name: "ufe",
+        default: Some("0"),
+        description: "Frequency dependence exponent for BTI recovery of mobility",
     },
     ModelParamSpec {
         name: "uotdd",

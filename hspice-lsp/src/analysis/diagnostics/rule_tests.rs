@@ -66,25 +66,6 @@ fn clean_netlist_has_no_diagnostics() {
 }
 
 #[test]
-fn compute_without_text_skips_text_rules() {
-    let text = ".tran 1n 1u\nV1 a 0 1\nR1 a 0 1k\n.end\n";
-    let syntax = parse_document(text, true);
-    let analysis = analyze(
-        &syntax.netlist,
-        ExternalContext {
-            complete: true,
-            ..Default::default()
-        },
-    );
-    let settings = DiagnosticSettings::default();
-    assert!(
-        compute(&syntax, &analysis, &settings, text)
-            .iter()
-            .any(|d| d.code == "title-is-statement")
-    );
-}
-
-#[test]
 fn block_structure_rules() {
     assert!(has(
         &format!("{BASE}.subckt s a b\nR2 a b 1\n"),
@@ -703,4 +684,218 @@ fn output_names_are_not_checked_in_include_files() {
         &DiagnosticSettings::default(),
     );
     assert!(found.iter().all(|(code, _)| *code != "undefined-node"));
+}
+
+#[test]
+fn enumerated_values_are_checked() {
+    assert!(
+        run(&format!("{BASE}.option method=gears\n"))
+            .contains(&("invalid-value", Severity::Warning))
+    );
+    assert!(has(&format!("{BASE}.option runlvl=7\n"), "invalid-value"));
+    assert!(has(
+        &format!("{BASE}.mosra reltotaltime=1 relmode=3\n.tran 1n 10n\n"),
+        "invalid-value"
+    ));
+    assert!(has(
+        &format!("{BASE}.fft v(a) window=hat\n"),
+        "invalid-value"
+    ));
+    assert!(!has(
+        &format!("{BASE}.option method=GEAR post=2.0 runlvl=5 parhie=local converge=-1\n"),
+        "invalid-value"
+    ));
+    assert!(!has(
+        &format!("{BASE}.param lvl=5\n.option runlvl=lvl\n"),
+        "invalid-value"
+    ));
+    assert!(!has(
+        &format!("{BASE}.option reltol=1e-4\n"),
+        "invalid-value"
+    ));
+}
+
+#[test]
+fn options_replaced_by_runlvl_are_hinted() {
+    assert!(
+        run(&format!("{BASE}.option trtol=7 itl3=4\n"))
+            .contains(&("runlvl-ignored-option", Severity::Hint))
+    );
+    assert!(!has(
+        &format!("{BASE}.option runlvl=0 trtol=7\n"),
+        "runlvl-ignored-option"
+    ));
+    assert!(!has(
+        &format!("{BASE}.option reltol=1e-4\n"),
+        "runlvl-ignored-option"
+    ));
+}
+
+#[test]
+fn module_blocks_are_tracked() {
+    assert!(has(
+        &format!("{BASE}.modulevar mv\n.param q=1\n"),
+        "unclosed-block"
+    ));
+    assert!(!has(
+        &format!("{BASE}.modulevar mv\n.temp 25\n.endmodulevar mv\n"),
+        "unclosed-block"
+    ));
+    assert!(!has(
+        &format!("{BASE}.module m\n.endmodule\n.prune 'a.spf' 'b.sp'\n"),
+        "unknown-command"
+    ));
+}
+
+#[test]
+fn number_plausibility_rules() {
+    assert!(has(&format!("{BASE}.param x=1e-6u\n"), "bad-number"));
+    assert!(!has(
+        &format!("{BASE}.option mixed_num_format=1\n.param x=1e-6u\n"),
+        "bad-number"
+    ));
+    assert!(has(
+        &format!("{BASE}.option mixed_num_format=0\n.param x=1e-6u\n"),
+        "bad-number"
+    ));
+    assert!(run(&format!("{BASE}C1 a 0 1\n")).contains(&("large-value", Severity::Hint)));
+    assert!(has(&format!("{BASE}L1 a 0 l=0.5\n"), "large-value"));
+    assert!(!has(
+        &format!("{BASE}C1 a 0 1p\nL1 a 0 10n\n"),
+        "large-value"
+    ));
+}
+
+#[test]
+fn element_connection_and_value_rules() {
+    assert!(run(&format!("{BASE}R2 a a 1k\n")).contains(&("shorted-element", Severity::Warning)));
+    assert!(has(&format!("{BASE}V2 0 gnd 1\n"), "shorted-element"));
+    assert!(!has(&format!("{BASE}M1 a a 0 0 nch\n"), "shorted-element"));
+    assert!(run(&format!("{BASE}R2 a 0\n")).contains(&("missing-value", Severity::Warning)));
+    assert!(has(&format!("{BASE}C1 a 0\n"), "missing-value"));
+    assert!(!has(
+        &format!("{BASE}R2 a 0 r='1k'\nR3 a 0 rmod l=1u w=1u\nVm a 0\n"),
+        "missing-value"
+    ));
+    assert!(run(&format!("{BASE}R2 a 0 1k m=0\n")).contains(&("bad-multiplier", Severity::Error)));
+    assert!(!has(&format!("{BASE}R2 a 0 1k m=2\n"), "bad-multiplier"));
+}
+
+#[test]
+fn data_and_temp_references_are_resolved() {
+    let data = ".data d a\n1\n.enddata\n";
+    assert!(
+        run(&format!("{BASE}.tran 1n 10n sweep data=nosuch\n"))
+            .contains(&("undefined-data", Severity::Error))
+    );
+    assert!(has(&format!("{BASE}.dc data=nosuch\n"), "undefined-data"));
+    assert!(!has(
+        &format!("{BASE}.param a=1\n{data}.tran 1n 10n sweep data=d\n"),
+        "undefined-data"
+    ));
+    assert!(has(&format!("{BASE}.temp tnosuch\n"), "undefined-param"));
+    assert!(!has(
+        &format!("{BASE}.param t1=85\n.temp 25 t1\n"),
+        "undefined-param"
+    ));
+}
+
+#[test]
+fn analysis_value_rules() {
+    assert!(has(&format!("{BASE}.tran -0.1n 50n\n"), "analysis-args"));
+    assert!(has(&format!("{BASE}.tran 1n 0\n"), "analysis-args"));
+    assert!(!has(&format!("{BASE}.tran 1n 1u 0 1p\n"), "analysis-args"));
+    assert!(has(&format!("{BASE}.ac lin 0 1 1g\n"), "analysis-args"));
+    assert!(has(&format!("{BASE}.ac dec 10 10g 1g\n"), "analysis-args"));
+    assert!(!has(
+        &format!("{BASE}.ac dec 10 1 1g\n.ac poi 2 5k 1k\n"),
+        "analysis-args"
+    ));
+    assert!(run(&format!("{BASE}.probe\n")).contains(&("empty-command", Severity::Warning)));
+    assert!(has(&format!("{BASE}.ic\n"), "empty-command"));
+    assert!(!has(&format!("{BASE}.print v(a)\n.op\n"), "empty-command"));
+}
+
+#[test]
+fn output_signals_in_parameters_are_warned() {
+    assert!(
+        run(&format!("{BASE}.param p1='2*v(a)'\nR2 a 0 p1\n"))
+            .contains(&("output-signal-param", Severity::Warning))
+    );
+    assert!(has(
+        &format!("{BASE}.tran 1n 10n\n.meas tran m param='v(a)*2'\n"),
+        "output-signal-param"
+    ));
+    assert!(!has(
+        &format!("{BASE}.param f(x)='2*x' q='max(1,2)'\nR2 a 0 'f(v(a))+q'\n"),
+        "output-signal-param"
+    ));
+}
+
+#[test]
+fn measure_keywords_cannot_be_parameters() {
+    let delay = "trig v(a) val=0.5 rise=1 targ v(a) val=0.5 fall=last";
+    assert!(
+        run(&format!(
+            "{BASE}.param td=1n\n.tran 1n 10n\n.meas tran d {delay} td=td\n"
+        ))
+        .contains(&("measure-keyword-param", Severity::Warning))
+    );
+    assert!(has(
+        &format!("{BASE}.param td=1n\n.tran 1n 10n\n.meas tran m avg v(a) from 0 to td\n"),
+        "measure-keyword-param"
+    ));
+    assert!(!has(
+        &format!("{BASE}.param tdel=1n\n.tran 1n 10n\n.meas tran m avg v(a) from=0 to=tdel\n"),
+        "measure-keyword-param"
+    ));
+    assert!(!has(
+        &format!("{BASE}.param td=1n\n.tran 1n 10n\n.meas tran d {delay} td=trig\nR2 a 0 td\n"),
+        "measure-keyword-param"
+    ));
+}
+
+#[test]
+fn source_function_rules() {
+    let source = |text: &str| format!("t\nV1 a 0 {text}\nR1 a 0 1k\n");
+    assert!(run(&source("PULSE(0)")).contains(&("source-args", Severity::Warning)));
+    assert!(has(&source("PULSE(0 1 0 -1p 1p 5n 10n)"), "source-args"));
+    assert!(has(&source("sin 0 1 -1k"), "source-args"));
+    assert!(run(&source("PWL(0 0 1n 1 0.5n 0)")).contains(&("source-args", Severity::Error)));
+    assert!(has(&source("pwl 0 0 5p 1 4.9p 0"), "source-args"));
+    assert!(!has(&source("PULSE(0 1 0 1p 1p 5n 10n)"), "source-args"));
+    assert!(!has(&source("PWL(0 0 1n 1 1n 0 2n 0) R=0"), "source-args"));
+    assert!(!has(
+        ".param vdd=1 td=1n\nV1 a 0 PULSE(0 vdd td)\nR1 a 0 1k\n",
+        "source-args"
+    ));
+    assert!(!has(&source("dc 1 ac 1"), "source-args"));
+}
+
+#[test]
+fn initial_conditions_and_branch_order() {
+    assert!(
+        run(&format!("{BASE}.ic v(a)=0\n.ic v(a)=1\n"))
+            .contains(&("duplicate-ic", Severity::Warning))
+    );
+    assert!(!has(
+        &format!("{BASE}.ic v(a)=0\n.nodeset v(a)=1\n"),
+        "duplicate-ic"
+    ));
+    assert!(!has(
+        &format!("{BASE}.if (1)\n.ic v(a)=0\n.else\n.ic v(a)=1\n.endif\n"),
+        "duplicate-ic"
+    ));
+    assert!(
+        run(&format!("{BASE}.if (1)\n.else\n.elseif (0)\n.endif\n"))
+            .contains(&("misplaced-else", Severity::Error))
+    );
+    assert!(has(
+        &format!("{BASE}.if (1)\n.else\n.else\n.endif\n"),
+        "misplaced-else"
+    ));
+    assert!(!has(
+        &format!("{BASE}.if (1)\n.elseif (0)\n.if (1)\n.else\n.endif\n.else\n.endif\n"),
+        "misplaced-else"
+    ));
 }

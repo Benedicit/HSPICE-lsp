@@ -1,5 +1,6 @@
 //! Text-based scan of the logical netlist line before the cursor (robust against half-typed lines).
 
+use crate::lang::commands::find_command;
 use crate::lang::elements::find_source_function;
 use crate::lang::functions::find_function;
 
@@ -118,18 +119,7 @@ impl LineScan {
 
     /// Returns the first word of the line (possibly still being typed), lowercase.
     pub fn first_word(&self) -> String {
-        let root = self.root();
-        root.tokens
-            .first()
-            .map(|token| token.text.clone())
-            .or_else(|| {
-                root.word_start.map(|start| {
-                    let word = self.slice(start, self.cursor);
-                    word.split('(').next().unwrap_or_default().to_string()
-                })
-            })
-            .unwrap_or_default()
-            .to_ascii_lowercase()
+        first_word(self.root(), &self.text, self.line_start)
     }
 
     /// Returns the start offset of the word being typed in the innermost frame.
@@ -163,22 +153,42 @@ impl LineScan {
     }
 }
 
+/// Returns the lowercase first word of a line, which may still be open.
+///
+/// # Arguments
+/// * `root` - root frame of the line
+/// * `text` - scanned text
+/// * `base` - absolute offset of `text[0]`
+fn first_word(root: &Frame, text: &str, base: usize) -> String {
+    root.tokens
+        .first()
+        .map(|token| token.text.as_str())
+        .or_else(|| {
+            root.word_start.map(|start| {
+                text.get(start.saturating_sub(base)..)
+                    .unwrap_or_default()
+                    .split('(')
+                    .next()
+                    .unwrap_or_default()
+            })
+        })
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+}
+
 /// Returns true if the line keyword starts a line whose values are expressions.
 ///
 /// # Arguments
 /// * `first` - lowercase first word of the line
-fn is_expression_line(first: &str) -> bool {
-    matches!(
-        first,
-        ".param" | ".parameter" | ".parameters" | ".para" | ".if" | ".elseif"
-    )
+pub fn is_expression_line(first: &str) -> bool {
+    find_command(first).is_some_and(|command| matches!(command.name, ".param" | ".if" | ".elseif"))
 }
 
 /// Returns true if the first word names an independent source element.
 ///
 /// # Arguments
 /// * `first` - lowercase first word of the line
-fn is_source_element(first: &str) -> bool {
+pub fn is_source_element(first: &str) -> bool {
     first.starts_with(['v', 'i'])
 }
 
@@ -329,16 +339,7 @@ fn cleaned_prefix(text: &str, start: usize, cursor: usize) -> Option<String> {
 /// * `text` - scanned text
 /// * `index` - index of a `(`
 fn trailing_identifier(text: &str, index: usize) -> &str {
-    let head = &text[..index];
-    let length = head
-        .chars()
-        .rev()
-        .take_while(|character| {
-            character.is_ascii_alphanumeric() || matches!(character, '_' | '.' | '#')
-        })
-        .map(char::len_utf8)
-        .sum::<usize>();
-    &head[head.len() - length..]
+    &text[identifier_start(text, index)..index]
 }
 
 /// Scans the logical line around the cursor.
@@ -418,23 +419,7 @@ fn glues_assignment(text: &str, index: usize) -> bool {
 /// * `text` - scanned text
 /// * `base` - absolute offset of `text[0]`
 fn opens_comma_mode(frames: &[Frame], name: &str, text: &str, base: usize) -> bool {
-    let root = &frames[0];
-    let first = root
-        .tokens
-        .first()
-        .map(|token| token.text.clone())
-        .or_else(|| {
-            root.word_start.map(|start| {
-                text.get(start - base..)
-                    .unwrap_or_default()
-                    .split('(')
-                    .next()
-                    .unwrap_or_default()
-                    .to_string()
-            })
-        })
-        .unwrap_or_default()
-        .to_ascii_lowercase();
+    let first = first_word(&frames[0], text, base);
     let in_quote = frames
         .iter()
         .any(|frame| matches!(frame.kind, FrameKind::Quote(_)));
@@ -548,7 +533,6 @@ pub fn name_start(text: &str, offset: usize) -> usize {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 

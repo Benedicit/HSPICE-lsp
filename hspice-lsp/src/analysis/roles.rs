@@ -1,6 +1,6 @@
 //! Assigns roles (nodes, model, subckt, controlling elements, values) to positional element arguments.
 
-use crate::lang::elements::{ElementSpec, find_source_function};
+use crate::lang::elements::{ElementSpec, SourceFunctionSpec, find_source_function};
 use crate::syntax::ast::{Arg, AssignKey, Assignment, Call, Element, Ident, Value};
 
 /// Role assignment of one element line.
@@ -56,6 +56,43 @@ pub fn assignments(element: &Element) -> impl Iterator<Item = &Assignment> {
         Arg::Assign(assignment) => Some(assignment),
         _ => None,
     })
+}
+
+/// One transient source function of an element line.
+pub struct SourceCall<'a> {
+    /// Table entry of the function.
+    pub function: &'static SourceFunctionSpec,
+    /// Function name as written.
+    pub name: &'a Ident,
+    /// Arguments: the call arguments of `PULSE(0 1)` or the rest of the line of `PULSE 0 1`.
+    pub args: &'a [Arg],
+    /// True for the parenthesised form.
+    pub parenthesised: bool,
+}
+
+/// Returns the transient source functions written on an element line, in both forms.
+///
+/// # Arguments
+/// * `element` - lowered element line
+pub fn source_calls(element: &Element) -> Vec<SourceCall<'_>> {
+    element
+        .args
+        .iter()
+        .enumerate()
+        .filter_map(|(index, arg)| {
+            let (name, args, parenthesised) = match arg {
+                Arg::Value(Value::Call(call)) => (&call.name, call.args.as_slice(), true),
+                Arg::Value(Value::Word(word)) => (word, &element.args[index + 1..], false),
+                _ => return None,
+            };
+            find_source_function(&name.key).map(|function| SourceCall {
+                function,
+                name,
+                args,
+                parenthesised,
+            })
+        })
+        .collect()
 }
 
 /// Returns the identifier of a value usable as a node or name (words and plain numbers).

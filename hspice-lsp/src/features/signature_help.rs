@@ -5,7 +5,7 @@ use ls_types::{
     SignatureHelp, SignatureInformation,
 };
 
-use super::completion::line_context::{Frame, FrameKind, LineScan, scan};
+use super::completion::line_context::{Frame, FrameKind, LineScan, is_source_element, scan};
 use super::{argument_docs, to_offset};
 use crate::analysis::symbols::{Symbol, SymbolDetail, SymbolKind};
 use crate::lang::commands::find_command;
@@ -127,7 +127,7 @@ fn named_call_frame(scan: &LineScan) -> Option<&Frame> {
 fn call_signature(document: &Document, scan: &LineScan) -> Option<SignatureHelp> {
     let frame = named_call_frame(scan)?;
     let first = scan.first_word();
-    let source_line = first.starts_with(['v', 'i']) && !first.starts_with('.') && !scan.in_quote();
+    let source_line = is_source_element(&first) && !scan.in_quote();
     let key = frame.name.to_ascii_lowercase();
     let active = Some(frame.argument_index());
     let source = find_source_function(&key)
@@ -138,11 +138,7 @@ fn call_signature(document: &Document, scan: &LineScan) -> Option<SignatureHelp>
                 .iter()
                 .map(|argument| argument.name.to_string())
                 .collect();
-            let label = format!(
-                "{}({})",
-                spec.name.to_ascii_uppercase(),
-                arguments.join(" ")
-            );
+            let label = spec.signature();
             let descriptions: Vec<&str> = spec
                 .arguments
                 .iter()
@@ -356,10 +352,9 @@ fn subckt_instance_signature(
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used)]
 mod tests {
-    use super::super::completion::test_support::{Opened, open, open_in_fixtures};
     use super::*;
+    use crate::test_support::{Opened, open, open_in_fixtures};
 
     fn help(opened: &Opened) -> Option<SignatureHelp> {
         let document = opened.workspace.document(&opened.uri)?;

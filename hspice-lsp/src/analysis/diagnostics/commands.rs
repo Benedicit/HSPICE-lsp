@@ -3,7 +3,8 @@
 use super::common::live_commands;
 use super::{Diagnostic, Severity};
 use crate::analysis::Analysis;
-use crate::analysis::symbols::SymbolKind;
+use crate::analysis::eval::evaluate;
+use crate::analysis::symbols::{ScopeId, SymbolKind};
 use crate::config::DiagnosticSettings;
 use crate::lang::Status;
 use crate::lang::commands::find_command;
@@ -11,8 +12,11 @@ use crate::lang::measure::RESERVED_MEASURE_NAMES;
 use crate::lang::models::find_model_type;
 use crate::lang::mosra::find_mosra_param;
 use crate::lang::options::find_option;
+use crate::lang::value_sets::values_of;
 use crate::state::document::SyntaxInfo;
-use crate::syntax::ast::{Arg, AssignKey, Command, CommandKind, Ident};
+use crate::syntax::ast::{
+    Arg, AssignKey, Assignment, Command, CommandKind, Expr, ExprKind, Ident, Value,
+};
 
 /// Runs all command-name rules.
 ///
@@ -25,13 +29,21 @@ pub fn check(
     analysis: &Analysis,
     settings: &DiagnosticSettings,
 ) -> Vec<Diagnostic> {
+    let runlvl_off =
+        live_commands(syntax, analysis).any(|(_, command, _)| disables_runlvl(command));
     live_commands(syntax, analysis)
-        .flat_map(|(_, command, _)| {
+        .flat_map(|(index, command, _)| {
+            let ignored = (!runlvl_off)
+                .then(|| ignored_by_runlvl(command))
+                .into_iter()
+                .flatten();
             command_status(command)
                 .into_iter()
                 .chain(model_type_status(command))
                 .chain(option_diagnostics(command, settings))
                 .chain(mosra_diagnostics(command, settings))
+                .chain(value_diagnostics(analysis, index, command, settings))
+                .chain(ignored)
                 .collect::<Vec<_>>()
         })
         .chain(reserved_measure_names(analysis))
@@ -195,13 +207,134 @@ fn mosra_diagnostics(command: &Command, settings: &DiagnosticSettings) -> Vec<Di
     missing_total.into_iter().chain(unknown).collect()
 }
 
+/// Returns the `key=expression` assignments of a command.
+///
+/// # Arguments
+/// * `args` - command arguments
+fn named_values(args: &[Arg]) -> impl Iterator<Item = (&Ident, &Expr)> {
+    args.iter().filter_map(|arg| match arg {
+        Arg::Assign(Assignment {
+            key: AssignKey::Name(key),
+            value: Some(Value::Expr(expr)),
+            ..
+        }) => Some((key, expr)),
+        _ => None,
+    })
+}
+
+/// Reports literal `key=value` arguments outside the documented value set.
+///
+/// # Arguments
+/// * `analysis` - semantic analysis
+/// * `index` - statement index of the command
+/// * `command` - dot command
+/// * `settings` - diagnostic toggles
+fn value_diagnostics(
+    analysis: &Analysis,
+    index: usize,
+    command: &Command,
+    settings: &DiagnosticSettings,
+) -> Vec<Diagnostic> {
+    let (CommandKind::Option { args } | CommandKind::Generic { args }) = &command.kind else {
+        return Vec::new();
+    };
+    let Some(spec) = find_command(&command.keyword.key).filter(|_| settings.unknown_options) else {
+        return Vec::new();
+    };
+    let scope = analysis.structure.scope_of(index);
+    named_values(args)
+        .filter_map(|(key, expr)| {
+            let values = values_of(spec.name, &key.key)?;
+            is_outside(analysis, scope, values, expr).then(|| {
+                Diagnostic::new(
+                    expr.range,
+                    Severity::Warning,
+                    "invalid-value",
+                    format!(
+                        "`{}` takes one of: {}",
+                        key.text,
+                        values.join(", ").to_ascii_uppercase()
+                    ),
+                )
+            })
+        })
+        .collect()
+}
+
+/// Returns true if a literal (number or bare word that is no parameter) is not one of `values`.
+///
+/// # Arguments
+/// * `analysis` - semantic analysis
+/// * `scope` - scope of the statement
+/// * `values` - documented lowercase values
+/// * `expr` - value expression
+fn is_outside(analysis: &Analysis, scope: ScopeId, values: &[&str], expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Ident(word) => {
+            analysis
+                .lookup(SymbolKind::Param, scope, &word.key)
+                .is_none()
+                && !values.contains(&word.key.as_str())
+        }
+        _ => evaluate(expr, &|_| None)
+            .is_some_and(|number| !values.iter().any(|value| value.parse() == Ok(number))),
+    }
+}
+
+/// Options that RUNLVL replaces by its own timestep control.
+const RUNLVL_IGNORED: &[&str] = &[
+    "lvltim", "dvdt", "ft", "fast", "trtol", "absvar", "relvar", "relq", "chgtol", "dvtr", "imin",
+    "itl3",
+];
+
+/// Returns true for `.option runlvl=0`, which switches RUNLVL off.
+///
+/// # Arguments
+/// * `command` - dot command
+fn disables_runlvl(command: &Command) -> bool {
+    let CommandKind::Option { args } = &command.kind else {
+        return false;
+    };
+    named_values(args)
+        .any(|(key, expr)| key.key == "runlvl" && evaluate(expr, &|_| None) == Some(0.0))
+}
+
+/// Hints at step-control options that have no effect while RUNLVL is active (its default).
+///
+/// # Arguments
+/// * `command` - dot command
+fn ignored_by_runlvl(command: &Command) -> Vec<Diagnostic> {
+    let CommandKind::Option { args } = &command.kind else {
+        return Vec::new();
+    };
+    args.iter()
+        .filter_map(argument_name)
+        .filter(|name| {
+            find_option(&name.key).is_some_and(|spec| RUNLVL_IGNORED.contains(&spec.name))
+        })
+        .map(|name| {
+            let mut diagnostic = Diagnostic::new(
+                name.range,
+                Severity::Hint,
+                "runlvl-ignored-option",
+                format!(
+                    "`{}` is ignored while RUNLVL is active (default 3); set `RUNLVL=0` to use it",
+                    name.text
+                ),
+            );
+            diagnostic.unnecessary = true;
+            diagnostic
+        })
+        .collect()
+}
+
 /// Returns the name of an argument: a bare word or the key of an assignment.
 ///
 /// # Arguments
 /// * `arg` - `.option` or `.mosra` argument
 fn argument_name(arg: &Arg) -> Option<&Ident> {
     match arg {
-        Arg::Value(crate::syntax::ast::Value::Word(word)) => Some(word),
+        Arg::Value(Value::Word(word)) => Some(word),
         Arg::Assign(assignment) => match &assignment.key {
             AssignKey::Name(name) => Some(name),
             AssignKey::Call(_) => None,

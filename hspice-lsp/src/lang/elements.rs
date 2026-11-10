@@ -80,6 +80,18 @@ impl Named for SourceFunctionSpec {
     }
 }
 
+impl SourceFunctionSpec {
+    /// Returns the call form `NAME(arg arg ...)`.
+    pub fn signature(&self) -> String {
+        let names: Vec<&str> = self
+            .arguments
+            .iter()
+            .map(|argument| argument.name)
+            .collect();
+        format!("{}({})", self.name.to_ascii_uppercase(), names.join(" "))
+    }
+}
+
 /// Node names that HSPICE treats as global ground (lowercase).
 pub const GROUND_NAMES: &[&str] = &["0", "gnd", "gnd!", "ground", "!gnd"];
 

@@ -4,7 +4,7 @@ use super::common::live_statements;
 use super::walk::all_expressions;
 use super::{Diagnostic, Severity};
 use crate::analysis::Analysis;
-use crate::analysis::symbols::{ROOT_SCOPE, ScopeId, SymbolDetail, SymbolKind};
+use crate::analysis::symbols::{ScopeId, SymbolDetail, SymbolKind};
 use crate::lang::functions::{find_function, is_optimization_function};
 use crate::lang::output_vars::find_output_var;
 use crate::state::document::SyntaxInfo;
@@ -18,12 +18,7 @@ use crate::syntax::ast::{Expr, ExprKind};
 pub fn check(syntax: &SyntaxInfo, analysis: &Analysis) -> Vec<Diagnostic> {
     live_statements(syntax, analysis)
         .flat_map(|(index, statement)| {
-            let scope = analysis
-                .structure
-                .statement_scope
-                .get(index)
-                .copied()
-                .unwrap_or(ROOT_SCOPE);
+            let scope = analysis.structure.scope_of(index);
             all_expressions(statement)
                 .into_iter()
                 .filter_map(move |expr| arity_problem(analysis, scope, expr))

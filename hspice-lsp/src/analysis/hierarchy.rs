@@ -95,12 +95,7 @@ fn is_defined_in(analysis: &Analysis, kind: SymbolKind, scope: ScopeId, key: &st
             .table
             .in_scope(SymbolKind::Node, ROOT_SCOPE, key)
             .iter()
-            .any(|id| {
-                matches!(
-                    analysis.symbols[*id].detail,
-                    SymbolDetail::Node { global: true, .. }
-                )
-            })
+            .any(|id| analysis.symbols[*id].is_global_node())
     };
     !analysis.table.in_scope(kind, scope, key).is_empty() || (kind == SymbolKind::Node && global())
 }

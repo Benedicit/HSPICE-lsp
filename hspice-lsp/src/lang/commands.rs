@@ -400,7 +400,7 @@ pub static COMMANDS: &[CommandSpec] = &[
         Rare,
         Supported,
         None,
-        ".STORE <file=f> <time=t> <repeat=t>",
+        ".STORE <TYPE=IC|MEMDUMP> <FILE=prefix> <TIME=t ...> <REPEAT=period> <TRANTIME=0|1> <SAVE_ON_KILL=0|1>",
         "Transient checkpoint."
     ),
     command!(
@@ -1282,7 +1282,7 @@ pub static COMMANDS: &[CommandSpec] = &[
         Rare,
         Supported,
         None,
-        ".MOSRA_SUBCKT_PIN_VOLT subckt=n1,..",
+        ".MOSRA_SUBCKT_PIN_VOLT <subckt=>name1, name2 ...",
         "MOSRA subcircuit pin voltages."
     ),
     command!(
@@ -1322,8 +1322,58 @@ pub static COMMANDS: &[CommandSpec] = &[
         Rare,
         Supported,
         None,
-        ".MODULE label",
-        "Module declaration (closing .ENDMODULE unverified)."
+        ".MODULE label <BASE=base_module_label>",
+        "3D-IC module block, closed by .ENDMODULE."
+    ),
+    command!(
+        ".endmodule",
+        [],
+        Models,
+        Rare,
+        Supported,
+        None,
+        ".ENDMODULE <label>",
+        "End of a .MODULE block."
+    ),
+    command!(
+        ".modulevar",
+        [],
+        Models,
+        Rare,
+        Supported,
+        None,
+        ".MODULEVAR label",
+        "Block of circuit properties (.PARAM, .OPTION, .TEMP) referenced by modulevar= on X instances."
+    ),
+    command!(
+        ".endmodulevar",
+        [],
+        Models,
+        Rare,
+        Supported,
+        None,
+        ".ENDMODULEVAR <label>",
+        "End of a .MODULEVAR block."
+    ),
+    command!(
+        ".prune",
+        [],
+        Files,
+        Rare,
+        Supported,
+        None,
+        ".PRUNE 'post-layout flat file' 'active-net file'",
+        "Writes an active-net netlist from a flat DSPF file without its parasitic R and C."
+    ),
+    command!(
+        ".ivdmargin",
+        [],
+        Output,
+        Rare,
+        Supported,
+        None,
+        ".IVDMARGIN ...",
+        "Drain voltage margin (Vdmargin) report of MOSFETs; arguments are in the command reference."
     ),
     command!(
         ".ibis",
@@ -1558,7 +1608,7 @@ pub fn find_command(name: &str) -> Option<&'static CommandSpec> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
+    use crate::lang::assert_unique_lowercase;
 
     #[test]
     fn finds_by_name_alias_and_mixed_case() {
@@ -1592,15 +1642,13 @@ mod tests {
 
     #[test]
     fn names_are_lowercase_dotted_and_unique() {
-        let all: Vec<&str> = COMMANDS
-            .iter()
-            .flat_map(|c| std::iter::once(c.name).chain(c.aliases.iter().copied()))
-            .collect();
+        assert_unique_lowercase(COMMANDS);
         assert!(
-            all.iter()
-                .all(|n| n.starts_with('.') && *n == n.to_ascii_lowercase())
+            COMMANDS
+                .iter()
+                .flat_map(Named::spellings)
+                .all(|name| name.starts_with('.'))
         );
-        assert_eq!(all.len(), all.iter().collect::<HashSet<_>>().len());
     }
 
     #[test]
@@ -1614,8 +1662,8 @@ mod tests {
                     .all(|argument| !argument.description.is_empty())
             );
             if let Some(snippet) = command.snippet {
-                let starts_with_spelling = std::iter::once(command.name)
-                    .chain(command.aliases.iter().copied())
+                let starts_with_spelling = command
+                    .spellings()
                     .any(|spelling| snippet.to_ascii_lowercase().starts_with(spelling));
                 assert!(starts_with_spelling, "{}", command.name);
             }

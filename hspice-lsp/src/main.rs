@@ -9,6 +9,8 @@ mod lang;
 mod server;
 mod state;
 mod syntax;
+#[cfg(test)]
+mod test_support;
 
 use std::process::ExitCode;
 

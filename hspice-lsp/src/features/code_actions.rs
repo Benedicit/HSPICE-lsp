@@ -7,10 +7,11 @@ use ls_types::{
     NumberOrString, TextEdit, WorkspaceEdit,
 };
 
-use super::to_lsp_range;
+use super::{is_token_delimiter, to_lsp_range};
 use crate::analysis::blocks::{Block, BlockKind};
 use crate::analysis::statement_at;
-use crate::analysis::symbols::{ROOT_SCOPE, SymbolKind};
+use crate::analysis::symbols::{ROOT_SCOPE, SymbolKind, bin_base};
+use crate::lang::Named;
 use crate::lang::commands::COMMANDS;
 use crate::lang::functions::FUNCTIONS;
 use crate::lang::options::OPTIONS;
@@ -146,14 +147,6 @@ fn insert_edit(workspace: &Workspace, document: &Document, offset: usize, text: 
     replace_edit(workspace, document, TextRange::new(offset, offset), text)
 }
 
-/// Returns true for characters that end a scale-factor-free number scan.
-///
-/// # Arguments
-/// * `c` - character to test
-fn is_token_delimiter(c: char) -> bool {
-    c.is_whitespace() || ",=()'\"".contains(c)
-}
-
 /// Finds the byte index of a milli suffix (`m`/`M`, not `meg`/`mil`) after the number at a token start.
 ///
 /// # Arguments
@@ -261,11 +254,7 @@ fn define_param_fix(workspace: &Workspace, document: &Document, range: TextRange
     let netlist = &document.syntax.netlist;
     let structure = &document.analysis.structure;
     let statement = statement_at(netlist, range.start)?;
-    let scope = structure
-        .statement_scope
-        .get(statement)
-        .copied()
-        .unwrap_or(ROOT_SCOPE);
+    let scope = structure.scope_of(statement);
     let anchor = match scope {
         ROOT_SCOPE => statement,
         inner => structure.scopes.get(inner)?.subckt_statement? + 1,
@@ -293,14 +282,10 @@ fn closer_text(block: &Block) -> String {
         Some(name) => format!("{keyword} {}", name.text),
         None => keyword.to_string(),
     };
+    let closer = block.kind.keywords().1;
     match block.kind {
-        BlockKind::Subckt => named(".ends"),
-        BlockKind::LibSection => named(".endl"),
-        BlockKind::If => ".endif".to_string(),
-        BlockKind::Data => ".enddata".to_string(),
-        BlockKind::Protect => ".unprot".to_string(),
-        BlockKind::Variation => ".end_variation".to_string(),
-        BlockKind::DesignExploration => ".end_design_exploration".to_string(),
+        BlockKind::Subckt | BlockKind::LibSection => named(closer),
+        _ => closer.to_string(),
     }
 }
 
@@ -457,18 +442,18 @@ fn candidate_names(document: &Document, code: &str, offset: usize) -> Vec<String
     match code {
         "unknown-command" => COMMANDS
             .iter()
-            .flat_map(|spec| std::iter::once(spec.name).chain(spec.aliases.iter().copied()))
+            .flat_map(Named::spellings)
             .map(str::to_string)
             .collect(),
         "unknown-option" => OPTIONS
             .iter()
-            .flat_map(|spec| std::iter::once(spec.name).chain(spec.aliases.iter().copied()))
+            .flat_map(Named::spellings)
             .map(str::to_string)
             .collect(),
         "undefined-subckt" => visible(SymbolKind::Subckt),
         "undefined-model" => visible(SymbolKind::Model)
             .into_iter()
-            .map(strip_bin_suffix)
+            .map(|name| bin_base(&name).map_or_else(|| name.clone(), str::to_string))
             .collect(),
         "undefined-param" => visible(SymbolKind::Param),
         "undefined-function" => visible(SymbolKind::Function)
@@ -476,21 +461,6 @@ fn candidate_names(document: &Document, code: &str, offset: usize) -> Vec<String
             .chain(FUNCTIONS.iter().map(|function| function.name.to_string()))
             .collect(),
         _ => Vec::new(),
-    }
-}
-
-/// Removes a trailing `.N` bin suffix from a model name.
-///
-/// # Arguments
-/// * `name` - model name
-fn strip_bin_suffix(name: String) -> String {
-    match name.rsplit_once('.') {
-        Some((base, bin))
-            if !base.is_empty() && !bin.is_empty() && bin.chars().all(|c| c.is_ascii_digit()) =>
-        {
-            base.to_string()
-        }
-        _ => name,
     }
 }
 
@@ -533,7 +503,6 @@ fn suggestions(
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::config::Settings;

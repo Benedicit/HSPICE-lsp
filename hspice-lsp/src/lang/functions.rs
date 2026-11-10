@@ -421,7 +421,7 @@ pub fn is_optimization_function(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
+    use crate::lang::assert_unique_lowercase;
 
     #[test]
     fn finds_functions_any_case() {
@@ -448,13 +448,8 @@ mod tests {
 
     #[test]
     fn table_invariants() {
-        let names: Vec<&str> = FUNCTIONS
-            .iter()
-            .flat_map(|f| std::iter::once(f.name).chain(f.aliases.iter().copied()))
-            .collect();
-        assert_eq!(names.len(), names.iter().collect::<HashSet<_>>().len());
+        assert_unique_lowercase(FUNCTIONS);
         for function in FUNCTIONS {
-            assert_eq!(function.name, function.name.to_ascii_lowercase());
             assert!(function.min_args <= function.max_args);
             assert!(function.parameters.len() >= function.max_args);
             assert!(function.signature.starts_with(function.name));

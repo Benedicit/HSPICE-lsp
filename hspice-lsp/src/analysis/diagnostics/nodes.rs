@@ -2,14 +2,17 @@
 
 use std::collections::HashSet;
 
+use super::common::{inside_if, live_commands};
 use super::{Diagnostic, Severity};
 use crate::analysis::Analysis;
 use crate::analysis::hierarchy::{PathLookup, lookup_path};
 use crate::analysis::symbols::{
     ROOT_SCOPE, RefContext, Reference, ScopeId, SymbolDetail, SymbolKind,
 };
+use crate::lang::commands::find_command;
 use crate::lang::elements::is_ground;
 use crate::state::document::SyntaxInfo;
+use crate::syntax::ast::{Arg, AssignKey, Assignment, CommandKind, Value};
 
 /// Returns the scopes whose nodes and elements may be incomplete.
 ///
@@ -23,10 +26,7 @@ use crate::state::document::SyntaxInfo;
 fn unchecked_scopes(syntax: &SyntaxInfo, analysis: &Analysis) -> HashSet<ScopeId> {
     let structure = &analysis.structure;
     let include_scopes = analysis.includes.iter().filter_map(|include| {
-        let scope = structure
-            .statement_scope
-            .get(include.directive.statement)
-            .copied()?;
+        let scope = structure.scope_of(include.directive.statement);
         (include.error.is_some() || scope != ROOT_SCOPE).then_some(scope)
     });
     let opaque_scopes = structure
@@ -175,4 +175,59 @@ pub fn no_ground(syntax: &SyntaxInfo, analysis: &Analysis) -> Vec<Diagnostic> {
         )],
         _ => Vec::new(),
     }
+}
+
+/// Warns about nodes initialised more than once by `.ic` or by `.nodeset`; HSPICE keeps the last value.
+///
+/// # Arguments
+/// * `syntax` - parse results
+/// * `analysis` - semantic analysis
+pub fn duplicate_initial_conditions(syntax: &SyntaxInfo, analysis: &Analysis) -> Vec<Diagnostic> {
+    let structure = &analysis.structure;
+    let mut seen = HashSet::new();
+    live_commands(syntax, analysis)
+        .filter(|(index, _, _)| !inside_if(analysis, *index))
+        .filter_map(|(index, command, _)| {
+            let name = find_command(&command.keyword.key)?.name;
+            let CommandKind::Generic { args } = &command.kind else {
+                return None;
+            };
+            let alter = structure.statement_alter.get(index).copied();
+            matches!(name, ".ic" | ".nodeset").then_some((
+                name,
+                structure.scope_of(index),
+                alter,
+                args,
+            ))
+        })
+        .flat_map(|(name, scope, alter, args)| {
+            args.iter().filter_map(move |arg| match arg {
+                Arg::Assign(Assignment {
+                    key: AssignKey::Call(call),
+                    ..
+                }) if call.name.key == "v" => {
+                    let nodes: Vec<String> = call
+                        .args
+                        .iter()
+                        .filter_map(|node| match node {
+                            Arg::Value(Value::Word(word)) => Some(word.key.clone()),
+                            Arg::Value(Value::Number(number)) => Some(number.text.clone()),
+                            _ => None,
+                        })
+                        .collect();
+                    Some(((name, scope, alter, nodes), call))
+                }
+                _ => None,
+            })
+        })
+        .filter(|(key, _)| !seen.insert(key.clone()))
+        .map(|((name, _, _, _), call)| {
+            Diagnostic::new(
+                call.range,
+                Severity::Warning,
+                "duplicate-ic",
+                format!("This node already has an `{name}` value; HSPICE keeps the last one"),
+            )
+        })
+        .collect()
 }

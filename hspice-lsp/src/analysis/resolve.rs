@@ -99,7 +99,7 @@ pub fn collect_definitions(
         .statements
         .iter()
         .enumerate()
-        .filter(|(index, _)| !structure.skipped.get(*index).copied().unwrap_or(false))
+        .filter(|(index, _)| !structure.is_skipped(*index))
         .flat_map(|(index, statement)| {
             let StatementKind::Command(command) = &statement.kind else {
                 return Vec::new();
@@ -109,11 +109,7 @@ pub fn collect_definitions(
                 range: statement.range,
                 section: structure.statement_section.get(index).cloned().flatten(),
             };
-            let scope = structure
-                .statement_scope
-                .get(index)
-                .copied()
-                .unwrap_or(ROOT_SCOPE);
+            let scope = structure.scope_of(index);
             command_definitions(command, index, scope, structure, &context)
         })
         .collect()
@@ -146,10 +142,7 @@ fn command_definitions(
             ports,
             params,
         } => {
-            let body = structure
-                .scopes
-                .iter()
-                .position(|candidate| candidate.subckt_statement == Some(index));
+            let body = structure.subckt_scope(index);
             let subckt = new_symbol(
                 SymbolKind::Subckt,
                 name,
@@ -383,11 +376,7 @@ fn collect_elements(
             _ => None,
         })
         .map(|(index, element)| {
-            let scope = structure
-                .statement_scope
-                .get(index)
-                .copied()
-                .unwrap_or(ROOT_SCOPE);
+            let scope = structure.scope_of(index);
             let is_model = |key: &str| {
                 table
                     .lookup(scopes, SymbolKind::Model, scope, key)
@@ -409,7 +398,7 @@ fn collect_elements(
                 scope,
                 spec,
                 roles: assign_roles(element, spec, &names),
-                skipped: structure.skipped.get(index).copied().unwrap_or(false),
+                skipped: structure.is_skipped(index),
             }
         })
         .collect()
@@ -663,14 +652,9 @@ impl Collector<'_> {
             .statements
             .iter()
             .enumerate()
-            .filter(|(index, _)| !self.structure.skipped.get(*index).copied().unwrap_or(false))
+            .filter(|(index, _)| !self.structure.is_skipped(*index))
             .flat_map(|(index, statement)| {
-                let scope = self
-                    .structure
-                    .statement_scope
-                    .get(index)
-                    .copied()
-                    .unwrap_or(ROOT_SCOPE);
+                let scope = self.structure.scope_of(index);
                 let pending = match &statement.kind {
                     StatementKind::Element(element) => self.element_refs(index, element),
                     StatementKind::Command(command) => self.command_refs(index, scope, command),
@@ -719,22 +703,11 @@ impl Collector<'_> {
                     self.table
                         .in_scope(kind, ROOT_SCOPE, key)
                         .iter()
-                        .find(|id| self.is_global_node(**id))
+                        .find(|id| self.symbols[**id].is_global_node())
                 })
                 .copied();
         }
         self.table.lookup(&self.structure.scopes, kind, scope, key)
-    }
-
-    /// Returns true if a symbol is a `.global` node.
-    ///
-    /// # Arguments
-    /// * `id` - symbol id
-    fn is_global_node(&self, id: SymbolId) -> bool {
-        matches!(
-            self.symbols.get(id).map(|symbol| &symbol.detail),
-            Some(SymbolDetail::Node { global: true, .. })
-        )
     }
 
     /// Collects references of an element line.
@@ -943,12 +916,7 @@ impl Collector<'_> {
                 })
                 .collect(),
             CommandKind::Subckt { ports, params, .. } => {
-                let body = self
-                    .structure
-                    .scopes
-                    .iter()
-                    .position(|candidate| candidate.subckt_statement == Some(index))
-                    .unwrap_or(scope);
+                let body = self.structure.subckt_scope(index).unwrap_or(scope);
                 let port_refs = ports
                     .iter()
                     .filter(|port| !is_ground(&port.text))
@@ -1009,8 +977,7 @@ impl Collector<'_> {
                 block.close == Some(index)
                     && matches!(block.kind, BlockKind::Subckt | BlockKind::LibSection)
             })
-            .and_then(|block| self.structure.statement_scope.get(block.open).copied())
-            .unwrap_or(ROOT_SCOPE);
+            .map_or(ROOT_SCOPE, |block| self.structure.scope_of(block.open));
         vec![Pending::new(
             kinds,
             name,
@@ -1046,6 +1013,16 @@ impl Collector<'_> {
             }
             ".fft" => assignment_value_refs(&without_keys(args, FFT_WORD_KEYS), scope),
             ".mosra" => assignment_value_refs(&without_keys(args, MOSRA_WORD_KEYS), scope),
+            ".temp" | ".temperature" => args
+                .iter()
+                .flat_map(|arg| match arg {
+                    Arg::Value(Value::Word(word)) if is_plain_name(&word.text) => {
+                        vec![Pending::new(PARAM, word, scope, RefContext::ValueWord)]
+                    }
+                    Arg::Value(Value::Expr(expr)) => expr_refs(expr, scope, &[]),
+                    _ => Vec::new(),
+                })
+                .collect(),
             _ => Vec::new(),
         };
         outputs.chain(specific).collect()

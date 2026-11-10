@@ -1453,7 +1453,16 @@ pub static OPTIONS: &[OptionSpec] = &[
         aliases: &[],
         value: OptionValue::Value,
         default: Some("SRS"),
-        description: "Sampling method (SRS, LHS, Factorial, OFAT, Sobol, Niederreiter)",
+        description: "Sampling method (SRS, LHS, Factorial, OFAT, Sobol, Niederreiter, External)",
+        usage: Usage::Rare,
+        status: Status::Supported,
+    },
+    OptionSpec {
+        name: "set_missing_values",
+        aliases: &[],
+        value: OptionValue::Value,
+        default: Some("Random"),
+        description: "Missing random values of a .DATA block with SAMPLING_METHOD=External: Random or Zero",
         usage: Usage::Rare,
         status: Status::Supported,
     },
@@ -2390,6 +2399,60 @@ pub static OPTIONS: &[OptionSpec] = &[
         value: OptionValue::Value,
         default: None,
         description: "MOSRA degradation output format (CSV)",
+        usage: Usage::Rare,
+        status: Status::Supported,
+    },
+    OptionSpec {
+        name: "tmiage",
+        aliases: &[],
+        value: OptionValue::FlagOrValue,
+        default: None,
+        description: "TMI aging flow (1 for TMI cases)",
+        usage: Usage::Rare,
+        status: Status::Supported,
+    },
+    OptionSpec {
+        name: "gen_cur_pol",
+        aliases: &[],
+        value: OptionValue::Value,
+        default: Some("OFF"),
+        description: "Branch current direction: OFF HSPICE rule, ON generic polarity (current into a terminal is positive)",
+        usage: Usage::Rare,
+        status: Status::Supported,
+    },
+    OptionSpec {
+        name: "mixed_num_format",
+        aliases: &[],
+        value: OptionValue::FlagOrValue,
+        default: Some("0"),
+        description: "1 allows numbers that combine an exponent with a scale factor (1e-6u)",
+        usage: Usage::Rare,
+        status: Status::Supported,
+    },
+    OptionSpec {
+        name: "eqn_analytical_deriv",
+        aliases: &[],
+        value: OptionValue::FlagOrValue,
+        default: None,
+        description: "Analytical derivatives of expression-based elements in HPP mode",
+        usage: Usage::Rare,
+        status: Status::Supported,
+    },
+    OptionSpec {
+        name: "ba_scaleparam",
+        aliases: &[],
+        value: OptionValue::Value,
+        default: None,
+        description: "Back-annotation scaling of instance parameters, e.g. 'LINEAR: WR LR; QUAD: ASR AREAR'",
+        usage: Usage::Rare,
+        status: Status::Supported,
+    },
+    OptionSpec {
+        name: "ivdmargin",
+        aliases: &[],
+        value: OptionValue::FlagOrValue,
+        default: None,
+        description: "Drain voltage margin (Vdmargin) report, see .IVDMARGIN",
         usage: Usage::Rare,
         status: Status::Supported,
     },
@@ -3387,7 +3450,7 @@ pub fn find_option(name: &str) -> Option<&'static OptionSpec> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
+    use crate::lang::assert_unique_lowercase;
 
     #[test]
     fn finds_by_name_alias_and_case() {
@@ -3427,12 +3490,7 @@ mod tests {
 
     #[test]
     fn table_invariants() {
-        let names: Vec<&str> = OPTIONS
-            .iter()
-            .flat_map(|o| std::iter::once(o.name).chain(o.aliases.iter().copied()))
-            .collect();
-        assert_eq!(names.len(), names.iter().collect::<HashSet<_>>().len());
-        assert!(names.iter().all(|n| *n == n.to_ascii_lowercase()));
+        assert_unique_lowercase(OPTIONS);
         assert!(OPTIONS.iter().all(|o| !o.description.is_empty()));
         assert!(OPTIONS.len() >= 350);
     }

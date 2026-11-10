@@ -148,6 +148,21 @@ impl Symbol {
     pub fn is_local(&self) -> bool {
         matches!(self.origin, Origin::Local)
     }
+
+    /// Returns true if the symbol is a `.global` node.
+    pub fn is_global_node(&self) -> bool {
+        matches!(self.detail, SymbolDetail::Node { global: true, .. })
+    }
+}
+
+/// Returns the base name of a binned model name such as `nch.12`, or `None` without a numeric bin suffix.
+///
+/// # Arguments
+/// * `name` - model name
+pub fn bin_base(name: &str) -> Option<&str> {
+    let (base, bin) = name.rsplit_once('.')?;
+    (!base.is_empty() && !bin.is_empty() && bin.chars().all(|character| character.is_ascii_digit()))
+        .then_some(base)
 }
 
 /// The syntactic context a reference appears in.
@@ -333,12 +348,10 @@ pub fn scope_chain(scopes: &[Scope], scope: ScopeId) -> impl Iterator<Item = Sco
 /// # Arguments
 /// * `symbol` - any symbol
 fn binned_base_name(symbol: &Symbol) -> Option<String> {
-    if symbol.kind != SymbolKind::Model {
-        return None;
-    }
-    let (base, bin) = symbol.name.key.rsplit_once('.')?;
-    (!base.is_empty() && !bin.is_empty() && bin.chars().all(|character| character.is_ascii_digit()))
-        .then(|| base.to_string())
+    (symbol.kind == SymbolKind::Model)
+        .then(|| bin_base(&symbol.name.key))
+        .flatten()
+        .map(str::to_string)
 }
 
 #[cfg(test)]

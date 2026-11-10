@@ -7,6 +7,7 @@ use std::sync::Arc;
 use super::blocks::build_structure;
 use super::resolve::collect_definitions;
 use super::symbols::{ExternalFile, Origin, ROOT_SCOPE, Symbol};
+use crate::lang::commands::find_command;
 use crate::state::line_index::LineIndex;
 use crate::syntax::ast::{CommandKind, Ident, Netlist, PathArg, StatementKind, TextRange};
 use crate::syntax::lower::lower;
@@ -189,20 +190,7 @@ fn without_body_scope(mut symbol: Symbol) -> Symbol {
 /// * `text` - file contents
 pub fn definition_ranges(text: &str) -> Vec<TextRange> {
     const FULL_LINE: &[&str] = &[
-        ".subckt",
-        ".macro",
-        ".ends",
-        ".eom",
-        ".param",
-        ".parameter",
-        ".parameters",
-        ".lib",
-        ".endl",
-        ".include",
-        ".inc",
-        ".incl",
-        ".global",
-        ".end",
+        ".subckt", ".ends", ".param", ".lib", ".endl", ".include", ".global", ".end",
     ];
     let lines: Vec<(usize, &str)> = text
         .split_inclusive('\n')
@@ -219,12 +207,12 @@ pub fn definition_ranges(text: &str) -> Vec<TextRange> {
             let keyword = line
                 .split_whitespace()
                 .next()
-                .unwrap_or_default()
-                .to_ascii_lowercase();
+                .and_then(find_command)
+                .map_or("", |command| command.name);
             if keyword == ".model" {
                 return model_header_ranges(*start, line);
             }
-            if !FULL_LINE.contains(&keyword.as_str()) {
+            if !FULL_LINE.contains(&keyword) {
                 return Vec::new();
             }
             let continuation_end = lines[index + 1..]
@@ -452,5 +440,6 @@ mod tests {
             pieces,
             vec![".model nch.1 nmos", "\n", ".subckt s a\n+ b\n"]
         );
+        assert_eq!(definition_ranges(".PARA a=1\n.EOM\n").len(), 2);
     }
 }

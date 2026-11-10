@@ -1,10 +1,14 @@
-//! Analysis-command rules: required arguments of `.tran`, `.ac`, `.dc`, `.noise`, `.tf` and `.pz`.
+//! Analysis-command rules: required and plausible arguments of `.tran`, `.ac`, `.dc`, `.noise`, `.tf`, `.pz`;
+//! output and initial-condition commands without arguments.
 
 use super::common::live_commands;
 use super::{Diagnostic, Severity};
 use crate::analysis::Analysis;
+use crate::analysis::eval::evaluate;
+use crate::lang::commands::find_command;
 use crate::state::document::SyntaxInfo;
 use crate::syntax::ast::{Arg, AssignKey, Command, CommandKind, Value};
+use crate::syntax::number::parse_number;
 
 /// Reports analysis commands that lack required arguments.
 ///
@@ -20,7 +24,42 @@ pub fn check(syntax: &SyntaxInfo, analysis: &Analysis) -> Vec<Diagnostic> {
             _ => None,
         })
         .map(|(range, message)| Diagnostic::new(range, Severity::Error, "analysis-args", message))
+        .chain(live_commands(syntax, analysis).filter_map(|(_, command, _)| empty_command(command)))
         .collect()
+}
+
+/// Warns about `.print`, `.probe`, `.ic` and `.nodeset` without arguments; HSPICE ignores such a line.
+///
+/// # Arguments
+/// * `command` - dot command
+fn empty_command(command: &Command) -> Option<Diagnostic> {
+    let CommandKind::Generic { args } = &command.kind else {
+        return None;
+    };
+    let name = find_command(&command.keyword.key)?.name;
+    (args.is_empty() && matches!(name, ".print" | ".probe" | ".ic" | ".nodeset")).then(|| {
+        Diagnostic::new(
+            command.keyword.range,
+            Severity::Warning,
+            "empty-command",
+            format!(
+                "`{}` has no arguments; HSPICE ignores the line",
+                command.keyword.text
+            ),
+        )
+    })
+}
+
+/// Returns the value of a numeric literal or constant expression.
+///
+/// # Arguments
+/// * `value` - positional value
+fn literal(value: &Value) -> Option<f64> {
+    match value {
+        Value::Number(number) => parse_number(&number.text).map(|parsed| parsed.value),
+        Value::Expr(expr) => evaluate(expr, &|_| None),
+        _ => None,
+    }
 }
 
 /// Describes the missing arguments of an analysis command, if any.
@@ -72,16 +111,26 @@ fn word_key(value: &Value) -> Option<&str> {
     }
 }
 
-/// `.tran` needs at least `tstep` and `tstop` unless `DATA=` is given.
+/// `.tran` needs a positive `tstep` and `tstop` unless `DATA=` is given.
 ///
 /// # Arguments
 /// * `args` - command arguments
 fn tran_problem(args: &[Arg]) -> Option<String> {
-    (!has_assignment(args, &["data"]) && leading_values(args).len() < 2)
-        .then(|| "`.tran` needs at least `tstep` and `tstop`".to_string())
+    if has_assignment(args, &["data"]) {
+        return None;
+    }
+    let values = leading_values(args);
+    if values.len() < 2 {
+        return Some("`.tran` needs at least `tstep` and `tstop`".to_string());
+    }
+    values
+        .iter()
+        .take(2)
+        .any(|value| literal(value).is_some_and(|number| number <= 0.0))
+        .then(|| "`.tran` needs `tstep` and `tstop` greater than 0".to_string())
 }
 
-/// `.ac` needs `DEC|OCT|LIN|POI np fstart fstop` unless `DATA=` is given.
+/// `.ac` needs `DEC|OCT|LIN|POI np fstart fstop` with `np >= 1` and `fstop >= fstart` unless `DATA=` is given.
 ///
 /// # Arguments
 /// * `args` - command arguments
@@ -100,12 +149,21 @@ fn ac_problem(args: &[Arg]) -> Option<String> {
         );
     };
     let needed = if kind == "poi" { 2 } else { 3 };
-    (values.len() - 1 < needed).then(|| {
-        format!(
+    if values.len() - 1 < needed {
+        return Some(format!(
             "`.ac {}` needs `np fstart fstop`",
             kind.to_ascii_uppercase()
-        )
-    })
+        ));
+    }
+    let number = |index: usize| values.get(index).and_then(|value| literal(value));
+    if number(1).is_some_and(|points| points < 1.0) {
+        return Some("`.ac` needs at least 1 point".to_string());
+    }
+    let descending = kind != "poi"
+        && number(2)
+            .zip(number(3))
+            .is_some_and(|(start, stop)| stop < start);
+    descending.then(|| "`.ac` stop frequency is below the start frequency".to_string())
 }
 
 /// `.dc` needs `var start stop step` (or `var DEC|OCT|LIN np start stop`, `var POI np v1 …`) unless `DATA=`/`MONTE=` is given.

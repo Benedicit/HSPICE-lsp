@@ -12,7 +12,7 @@ use ls_types::{
 };
 use tree_sitter::Node;
 
-use crate::analysis::symbols::{RefContext, SymbolDetail, SymbolId, SymbolKind};
+use crate::analysis::symbols::{RefContext, Symbol, SymbolId, SymbolKind};
 use crate::lang::commands::find_command;
 use crate::lang::elements::{find_source_function, is_ground};
 use crate::lang::functions::{find_function, find_special_variable, is_optimization_function};
@@ -357,14 +357,7 @@ fn collect_statements(document: &Document, sink: &mut Sink) {
         .statements
         .iter()
         .enumerate()
-        .filter(|(index, _)| {
-            !analysis
-                .structure
-                .skipped
-                .get(*index)
-                .copied()
-                .unwrap_or(false)
-        })
+        .filter(|(index, _)| !analysis.structure.is_skipped(*index))
         .for_each(|(index, statement)| match &statement.kind {
             StatementKind::Command(command) => command_tokens(command, sink),
             StatementKind::Element(element) => {
@@ -742,14 +735,11 @@ fn symbol_token(kind: SymbolKind) -> (TokenKind, u32) {
 /// * `document` - analysed document
 /// * `id` - symbol id
 fn is_global_node(document: &Document, id: SymbolId) -> bool {
-    matches!(
-        document
-            .analysis
-            .symbols
-            .get(id)
-            .map(|symbol| &symbol.detail),
-        Some(SymbolDetail::Node { global: true, .. })
-    )
+    document
+        .analysis
+        .symbols
+        .get(id)
+        .is_some_and(Symbol::is_global_node)
 }
 
 /// Adds tokens from definitions and resolved references.
@@ -760,14 +750,7 @@ fn is_global_node(document: &Document, id: SymbolId) -> bool {
 fn collect_resolution(document: &Document, sink: &mut Sink) {
     let analysis = &document.analysis;
     let skipped = |statement: Option<usize>| {
-        statement.is_some_and(|index| {
-            analysis
-                .structure
-                .skipped
-                .get(index)
-                .copied()
-                .unwrap_or(false)
-        })
+        statement.is_some_and(|index| analysis.structure.is_skipped(index))
     };
     analysis
         .references

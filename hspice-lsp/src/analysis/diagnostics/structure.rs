@@ -3,7 +3,7 @@
 use super::common::{live_commands, repeated_definitions};
 use super::{Diagnostic, Severity};
 use crate::analysis::Analysis;
-use crate::analysis::blocks::{Block, BlockKind};
+use crate::analysis::blocks::{Block, BlockKind, closed_kind};
 use crate::analysis::symbols::{Symbol, SymbolKind};
 use crate::lang::commands::{CommandCategory, find_command};
 use crate::state::document::SyntaxInfo;
@@ -18,27 +18,12 @@ pub fn check(syntax: &SyntaxInfo, analysis: &Analysis) -> Vec<Diagnostic> {
     unclosed_blocks(syntax, analysis)
         .into_iter()
         .chain(unmatched_ends(syntax, analysis))
+        .chain(misplaced_branches(syntax, analysis))
         .chain(ends_name_mismatches(analysis))
         .chain(bad_ports(syntax, analysis))
         .chain(duplicate_definitions(analysis))
         .chain(missing_end(syntax, analysis))
         .collect()
-}
-
-/// Returns the opening and closing keywords of a block kind.
-///
-/// # Arguments
-/// * `kind` - block kind
-fn keywords_of(kind: BlockKind) -> (&'static str, &'static str) {
-    match kind {
-        BlockKind::Subckt => (".subckt", ".ends"),
-        BlockKind::LibSection => (".lib", ".endl"),
-        BlockKind::If => (".if", ".endif"),
-        BlockKind::Data => (".data", ".enddata"),
-        BlockKind::Protect => (".protect", ".unprotect"),
-        BlockKind::Variation => (".variation", ".end_variation"),
-        BlockKind::DesignExploration => (".design_exploration", ".end_design_exploration"),
-    }
 }
 
 /// Reports blocks without a closing statement, on their opener.
@@ -54,7 +39,7 @@ fn unclosed_blocks(syntax: &SyntaxInfo, analysis: &Analysis) -> Vec<Diagnostic> 
         .filter(|block| block.close.is_none())
         .filter_map(|block| {
             let statement = syntax.netlist.statements.get(block.open)?;
-            let (opener, closer) = keywords_of(block.kind);
+            let (opener, closer) = block.kind.keywords();
             let named = block.name.as_ref().map_or_else(
                 || opener.to_string(),
                 |name| format!("{opener} {}", name.text),
@@ -84,18 +69,7 @@ fn unmatched_ends(syntax: &SyntaxInfo, analysis: &Analysis) -> Vec<Diagnostic> {
             let StatementKind::Command(command) = &statement.kind else {
                 return None;
             };
-            let opener = match &command.kind {
-                CommandKind::Ends { .. } => ".subckt",
-                CommandKind::Endl { .. } => ".lib",
-                CommandKind::EndIf | CommandKind::Else | CommandKind::ElseIf { .. } => ".if",
-                _ => match command.keyword.key.as_str() {
-                    ".enddata" => ".data",
-                    ".unprot" | ".unprotect" => ".protect",
-                    ".end_variation" => ".variation",
-                    ".end_design_exploration" => ".design_exploration",
-                    _ => "opener",
-                },
-            };
+            let opener = closed_kind(command).map_or("opener", |kind| kind.keywords().0);
             Some(Diagnostic::new(
                 command.keyword.range,
                 Severity::Error,
@@ -104,6 +78,41 @@ fn unmatched_ends(syntax: &SyntaxInfo, analysis: &Analysis) -> Vec<Diagnostic> {
             ))
         })
         .collect()
+}
+
+/// Reports `.elseif` and `.else` that follow the `.else` of the same `.if` block.
+///
+/// # Arguments
+/// * `syntax` - parse results
+/// * `analysis` - semantic analysis
+fn misplaced_branches(syntax: &SyntaxInfo, analysis: &Analysis) -> Vec<Diagnostic> {
+    let (_, diagnostics) = live_commands(syntax, analysis).fold(
+        (Vec::<bool>::new(), Vec::new()),
+        |(mut else_seen, mut diagnostics), (_, command, _)| {
+            match &command.kind {
+                CommandKind::If { .. } => else_seen.push(false),
+                CommandKind::EndIf => {
+                    else_seen.pop();
+                }
+                CommandKind::Else | CommandKind::ElseIf { .. } => {
+                    if else_seen.last() == Some(&true) {
+                        diagnostics.push(Diagnostic::new(
+                            command.keyword.range,
+                            Severity::Error,
+                            "misplaced-else",
+                            format!("`{}` cannot follow `.else`", command.keyword.text),
+                        ));
+                    }
+                    if let (CommandKind::Else, Some(seen)) = (&command.kind, else_seen.last_mut()) {
+                        *seen = true;
+                    }
+                }
+                _ => {}
+            }
+            (else_seen, diagnostics)
+        },
+    );
+    diagnostics
 }
 
 /// Warns when `.ends name` / `.endl name` names a different block than it closes.
@@ -127,7 +136,7 @@ fn ends_name_mismatches(analysis: &Analysis) -> Vec<Diagnostic> {
 fn mismatch_of(block: &Block) -> Option<Diagnostic> {
     let (name, close_name) = (block.name.as_ref()?, block.close_name.as_ref()?);
     (name.key != close_name.key).then(|| {
-        let (opener, closer) = keywords_of(block.kind);
+        let (opener, closer) = block.kind.keywords();
         Diagnostic::new(
             close_name.range,
             Severity::Warning,

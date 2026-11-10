@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 use ls_types::CompletionItemKind;
 
 use super::candidate::{Candidate, escape_snippet};
+use crate::analysis::blocks::BlockKind;
 use crate::analysis::includes::{read_source, resolve_include_path};
-use crate::analysis::symbols::{ScopeId, Symbol, SymbolDetail, SymbolKind};
+use crate::analysis::symbols::{ROOT_SCOPE, ScopeId, Symbol, SymbolDetail, SymbolKind, bin_base};
 use crate::features::{argument_docs, definition_text};
 use crate::lang::commands::COMMANDS;
 use crate::lang::elements::{ELEMENTS, ElementSpec, SOURCE_FUNCTIONS};
@@ -17,7 +18,7 @@ use crate::lang::models::{MODEL_TYPES, ModelParamSpec};
 use crate::lang::mosra::MOSRA_PARAMS;
 use crate::lang::options::{OPTIONS, OptionValue};
 use crate::lang::output_vars::OUTPUT_VARS;
-use crate::lang::{KeywordSpec, Status, Usage};
+use crate::lang::{KeywordSpec, Named, Status, Usage};
 use crate::state::document::Document;
 use crate::state::workspace::Workspace;
 
@@ -74,10 +75,7 @@ pub fn commands() -> Vec<Candidate> {
         .iter()
         .filter(|spec| spec.status != Status::Foreign)
         .map(|spec| {
-            let filter = std::iter::once(spec.name)
-                .chain(spec.aliases.iter().copied())
-                .collect::<Vec<_>>()
-                .join(" ");
+            let filter = filter_text(spec);
             let mut documentation = syntax_documentation(spec.synopsis, spec.description);
             documentation.push_str(&argument_docs(spec.arguments));
             if spec.status == Status::Obsolete {
@@ -126,9 +124,7 @@ pub fn elements() -> Vec<Candidate> {
 pub fn nodes(env: Env, sort: &str) -> Vec<Candidate> {
     let mut seen = HashSet::new();
     let symbols = env.document.analysis.symbols.iter().filter(|symbol| {
-        symbol.kind == SymbolKind::Node
-            && (symbol.scope == env.scope
-                || matches!(symbol.detail, SymbolDetail::Node { global: true, .. }))
+        symbol.kind == SymbolKind::Node && (symbol.scope == env.scope || symbol.is_global_node())
     });
     symbols
         .filter(|symbol| seen.insert(symbol.name.key.clone()))
@@ -200,18 +196,6 @@ pub fn subckts(env: Env, typed_ports: Option<usize>) -> Vec<Candidate> {
         .collect()
 }
 
-/// Returns the base name of a binned model name (`nch.1` becomes `nch`).
-///
-/// # Arguments
-/// * `name` - model name as defined
-fn base_model_name(name: &str) -> &str {
-    name.rsplit_once('.')
-        .filter(|(base, bin)| {
-            !base.is_empty() && !bin.is_empty() && bin.chars().all(|c| c.is_ascii_digit())
-        })
-        .map_or(name, |(base, _)| base)
-}
-
 /// Returns the models whose type is one of `types`, binned names collapsed.
 ///
 /// # Arguments
@@ -232,9 +216,17 @@ pub fn models(env: Env, types: &[&str], sort: &str) -> Vec<Candidate> {
             } => types.is_empty() || types.contains(&kind.key.as_str()),
             _ => types.is_empty(),
         })
-        .filter(|symbol| seen.insert(base_model_name(&symbol.name.key).to_string()))
+        .filter(|symbol| {
+            seen.insert(
+                bin_base(&symbol.name.key)
+                    .unwrap_or(&symbol.name.key)
+                    .to_string(),
+            )
+        })
         .map(|symbol| {
-            let base = base_model_name(&symbol.name.text).to_string();
+            let base = bin_base(&symbol.name.text)
+                .unwrap_or(&symbol.name.text)
+                .to_string();
             let bins = analysis.table.bins(&base.to_ascii_lowercase()).len();
             let detail = match bins {
                 0 => first_line(definition_text(env.document, symbol)).to_string(),
@@ -310,6 +302,14 @@ pub fn subckt_params(env: Env, subckt: &str) -> Vec<Candidate> {
         .collect()
 }
 
+/// Returns the filter text of a table entry: its name and aliases.
+///
+/// # Arguments
+/// * `entry` - table entry
+fn filter_text(entry: &impl Named) -> String {
+    entry.spellings().collect::<Vec<_>>().join(" ")
+}
+
 /// Returns the keywords of independent sources (`DC`, `AC` and the transient functions) as snippets.
 pub fn source_keywords() -> Vec<Candidate> {
     let functions = SOURCE_FUNCTIONS.iter().map(|spec| {
@@ -324,21 +324,15 @@ pub fn source_keywords() -> Vec<Candidate> {
             .map(|(index, name)| format!("${{{}:{name}}}", index + 1))
             .collect::<Vec<_>>()
             .join(" ");
-        let signature = format!("{}({})", spec.name.to_ascii_uppercase(), names.join(" "));
         Candidate::new(spec.name.to_ascii_uppercase(), CompletionItemKind::FUNCTION)
             .snippet(format!("{}({arguments})", spec.name.to_ascii_uppercase()))
-            .detail(signature)
+            .detail(spec.signature())
             .documentation(format!(
                 "{}{}",
                 spec.description,
                 argument_docs(spec.arguments)
             ))
-            .filter(
-                std::iter::once(spec.name)
-                    .chain(spec.aliases.iter().copied())
-                    .collect::<Vec<_>>()
-                    .join(" "),
-            )
+            .filter(filter_text(spec))
             .sort("1")
     });
     let levels = [
@@ -434,12 +428,7 @@ pub fn builtin_functions() -> Vec<Candidate> {
                 .snippet(format!("{}({placeholders})", spec.name))
                 .detail(spec.signature)
                 .documentation(spec.description)
-                .filter(
-                    std::iter::once(spec.name)
-                        .chain(spec.aliases.iter().copied())
-                        .collect::<Vec<_>>()
-                        .join(" "),
-                )
+                .filter(filter_text(spec))
                 .sort("3")
         })
         .collect()
@@ -476,12 +465,7 @@ pub fn options(prefix_given: bool) -> Vec<Candidate> {
                     |default| format!("default {default}"),
                 ))
                 .documentation(spec.description)
-                .filter(
-                    std::iter::once(spec.name)
-                        .chain(spec.aliases.iter().copied())
-                        .collect::<Vec<_>>()
-                        .join(" "),
-                )
+                .filter(filter_text(spec))
                 .sort(usage_sort(spec.usage, spec.status))
                 .deprecated(spec.status == Status::Obsolete);
             match spec.value {
@@ -553,12 +537,7 @@ pub fn keywords(table: &[KeywordSpec], kind: CompletionItemKind, sort: &str) -> 
             Candidate::new(label, kind)
                 .detail(spec.description)
                 .documentation(spec.description)
-                .filter(
-                    std::iter::once(spec.name)
-                        .chain(spec.aliases.iter().copied())
-                        .collect::<Vec<_>>()
-                        .join(" "),
-                )
+                .filter(filter_text(spec))
                 .sort(sort)
         })
         .collect()
@@ -572,6 +551,81 @@ pub fn analysis_keywords() -> Vec<Candidate> {
 /// Returns the result types of `.print`, `.probe` and `.meas` (`tran`, `ac`, `dc` …).
 pub fn analysis_types() -> Vec<Candidate> {
     keywords(ANALYSIS_TYPES, CompletionItemKind::ENUM_MEMBER, "0")
+}
+
+/// Returns the documented values of a `key=value` argument in table order.
+///
+/// # Arguments
+/// * `values` - lowercase values
+pub fn literal_values(values: &[&str]) -> Vec<Candidate> {
+    values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            Candidate::new(value.to_ascii_uppercase(), CompletionItemKind::ENUM_MEMBER)
+                .sort(format!("{index:02}"))
+        })
+        .collect()
+}
+
+/// Returns the `.data` blocks of the document.
+///
+/// # Arguments
+/// * `env` - cursor environment
+pub fn data_blocks(env: Env) -> Vec<Candidate> {
+    let analysis = &env.document.analysis;
+    analysis
+        .visible_symbols(SymbolKind::DataBlock, ROOT_SCOPE)
+        .into_iter()
+        .map(|id| {
+            Candidate::new(&analysis.symbols[id].name.text, CompletionItemKind::STRUCT)
+                .detail("data block")
+                .sort("0")
+        })
+        .collect()
+}
+
+/// Returns the name of the innermost block of `kind` that is open at a line, for `.ends` / `.endl`.
+///
+/// # Arguments
+/// * `env` - cursor environment
+/// * `line_start` - offset of the line being typed
+/// * `kind` - block kind to close
+pub fn open_block_names(env: Env, line_start: usize, kind: BlockKind) -> Vec<Candidate> {
+    let statements = &env.document.syntax.netlist.statements;
+    let start_of = |index: usize| statements.get(index).map(|statement| statement.range.start);
+    env.document
+        .analysis
+        .structure
+        .blocks
+        .iter()
+        .filter(|block| block.kind == kind)
+        .filter(|block| start_of(block.open).is_some_and(|start| start < line_start))
+        .filter(|block| {
+            block
+                .close
+                .is_none_or(|close| start_of(close).is_some_and(|start| start >= line_start))
+        })
+        .filter_map(|block| block.name.as_ref())
+        .next_back()
+        .map(|name| Candidate::new(&name.text, CompletionItemKind::MODULE).sort("0"))
+        .into_iter()
+        .collect()
+}
+
+/// Returns the output types of `.MOSRAPRINT` as call snippets.
+pub fn mosraprint_types() -> Vec<Candidate> {
+    ["vth", "gm", "gds", "ids", "dids", "dvth"]
+        .into_iter()
+        .map(|name| {
+            let name = name.to_ascii_uppercase();
+            Candidate::new(format!("{name}("), CompletionItemKind::FUNCTION)
+                .snippet(format!(
+                    "{name}(${{1:element}}, vds=${{2}}, vgs=${{3}}, vbs=${{4}})"
+                ))
+                .detail("MOSRA output type")
+        })
+        .collect()
 }
 
 /// Returns the `.mosra` parameters (`RELTOTALTIME=`, `RELSTEP=` …).
@@ -594,12 +648,7 @@ pub fn output_variables() -> Vec<Candidate> {
                 .snippet(format!("{name}(${{1}})"))
                 .detail(spec.signature)
                 .documentation(spec.description)
-                .filter(
-                    std::iter::once(spec.name)
-                        .chain(spec.aliases.iter().copied())
-                        .collect::<Vec<_>>()
-                        .join(" "),
-                )
+                .filter(filter_text(spec))
                 .sort("2")
         })
         .collect()
@@ -727,22 +776,12 @@ pub fn paths(env: Env, typed: &str) -> (Vec<Candidate>, usize) {
 /// * `env` - cursor environment
 /// * `raw_path` - path as written (without quotes)
 pub fn lib_sections(env: Env, raw_path: &str) -> Vec<Candidate> {
-    let search: Vec<PathBuf> = env
-        .workspace
-        .root
-        .iter()
-        .cloned()
-        .chain(
-            env.workspace
-                .settings
-                .include_paths
-                .iter()
-                .map(PathBuf::from),
-        )
-        .collect();
     let Some(base) = base_directory(env) else {
         return Vec::new();
     };
+    let search = env
+        .workspace
+        .search_dirs(&env.document.syntax.netlist, &base);
     let Some(text) =
         resolve_include_path(raw_path, &base, &search).and_then(|path| read_source(&path).ok())
     else {

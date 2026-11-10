@@ -148,6 +148,12 @@ pub static MOSRA_PARAMS: &[KeywordSpec] = &[
         takes_value: true,
         description: "PMOS failure criterion for lifetime computation (.OPTION DEGFP takes precedence)",
     },
+    KeywordSpec {
+        name: "frequency",
+        aliases: &[],
+        takes_value: true,
+        description: "Signal frequency for the frequency-dependent BTI recovery (computed automatically if omitted)",
+    },
 ];
 
 /// Looks up a `.MOSRA` parameter by name (case-insensitive).
@@ -168,6 +174,7 @@ mod tests {
         assert!(find_mosra_param("relstep").is_some());
         assert!(find_mosra_param("bogus").is_none());
         assert!(find_mosra_param("DegradationTime").is_some());
-        assert_eq!(MOSRA_PARAMS.len(), 24);
+        assert_eq!(MOSRA_PARAMS.len(), 25);
+        crate::lang::assert_unique_lowercase(MOSRA_PARAMS);
     }
 }
