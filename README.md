@@ -31,7 +31,7 @@ Everything is based solely upon publicly available manuals/reference sheets onli
 - **Completion**: dot commands and element templates (snippets, HSPICE keywords in uppercase), subckts, models matching the element type, nodes, parameters, functions, instance/model parameters, source functions, `.option` names, analysis and `.measure` keywords, output variables, include paths and `.lib` sections, documented values after `key=`, `.data` names after `data=`, the block name after `.ends`/`.endl`, and the arguments of `.mosraprint`, `.appendmodel` and `.mosra_subckt_pin_volt`.
 - **Hover**: command synopses with argument descriptions, element terminal mapping, parameter values (evaluated), subckt and model cards, node connections, number values (`10M` = 1e-2).
 - **Navigation**: go to definition (including into `.include`/`.lib` files and all model bins), find references, document highlight, rename.
-- **Structure**: document and workspace symbols, folding ranges (comment runs only with `folding.comments`, `+` continued statements only with `folding.continuations`).
+- **Structure**: document and workspace symbols, folding ranges (each opt-in: blocks with `folding.blocks`, `.alter` sections with `folding.alter`, comment runs with `folding.comments`, `+` continued statements with `folding.continuations`).
 - **Highlighting**: semantic tokens on top of tree-sitter (Neovim) or a basic TextMate grammar (VS Code).
 - **Editing help**: signature help, inlay hints (subckt port and terminal names, source-function arguments), quick fixes (`MEG`, add `.param`, insert closers and `.end`, "did you mean …").
 
@@ -103,7 +103,7 @@ opts = {
     diagnostics = { floatingNodes = true, unusedParams = true, unknownOptions = true, megSuffix = true },
     inlayHints = { ports = true, sourceArgs = true },
     workspaceScan = { enabled = true, maxFiles = 500 },
-    folding = { comments = false, continuations = false },
+    folding = { blocks = false, alter = false, comments = false, continuations = false },
     maxIncludeFileSizeMb = 64,
   },
 }
@@ -122,6 +122,8 @@ Settings are sent as `initializationOptions` and as `settings.hspice` in `worksp
 | `diagnostics.megSuffix` | `true` | Report suspicious `m`/`meg` suffix use |
 | `inlayHints.ports` | `true` | Show port names on subcircuit instances |
 | `inlayHints.sourceArgs` | `true` | Show argument names on source instances |
+| `folding.blocks` | `false` | Fold `.subckt`, `.lib`, `.if`, `.data` and other blocks |
+| `folding.alter` | `false` | Fold `.alter` sections |
 | `folding.comments` | `false` | Fold runs of consecutive comment lines |
 | `folding.continuations` | `false` | Fold statements continued over several lines with `+` |
 | `workspaceScan.enabled` | `true` | Index other netlists in the workspace |

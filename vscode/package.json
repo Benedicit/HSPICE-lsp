@@ -101,6 +101,16 @@
           "default": true,
           "description": "Show argument names on source instances."
         },
+        "hspice.folding.blocks": {
+          "type": "boolean",
+          "default": false,
+          "description": "Fold .subckt, .lib, .if, .data and other blocks."
+        },
+        "hspice.folding.alter": {
+          "type": "boolean",
+          "default": false,
+          "description": "Fold .alter sections."
+        },
         "hspice.folding.comments": {
           "type": "boolean",
           "default": false,

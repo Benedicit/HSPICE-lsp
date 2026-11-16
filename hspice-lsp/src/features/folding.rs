@@ -1,4 +1,4 @@
-//! Folding ranges for blocks, `.alter` sections, comment runs (opt-in) and `+` continued statements (opt-in).
+//! Folding ranges for blocks, `.alter` sections, comment runs and `+` continued statements, each opt-in.
 
 use std::collections::BTreeMap;
 
@@ -17,24 +17,13 @@ type Fold = (u32, u32, Option<FoldingRangeKind>);
 /// * `workspace` - workspace state
 /// * `document` - document to fold
 pub fn folding_ranges(workspace: &Workspace, document: &Document) -> Option<Vec<FoldingRange>> {
-    let comments = workspace
-        .settings
-        .folding
-        .comments
-        .then(|| comment_folds(document))
-        .into_iter()
-        .flatten();
-    let continuations = workspace
-        .settings
-        .folding
-        .continuations
-        .then(|| statement_folds(document))
-        .into_iter()
-        .flatten();
-    let folds = block_folds(document)
-        .chain(alter_folds(document))
-        .chain(comments)
-        .chain(continuations);
+    let settings = workspace.settings.folding;
+    let folds = if_enabled(settings.blocks, || block_folds(document))
+        .chain(if_enabled(settings.alter, || alter_folds(document)))
+        .chain(if_enabled(settings.comments, || comment_folds(document)))
+        .chain(if_enabled(settings.continuations, || {
+            statement_folds(document)
+        }));
     let by_start: BTreeMap<u32, Fold> = folds.fold(BTreeMap::new(), |mut map, fold| {
         let keep_existing = map
             .get(&fold.0)
@@ -57,6 +46,18 @@ pub fn folding_ranges(workspace: &Workspace, document: &Document) -> Option<Vec<
             })
             .collect(),
     )
+}
+
+/// Returns the folds of a source, or none if the source is disabled.
+///
+/// # Arguments
+/// * `enabled` - setting that toggles the source
+/// * `folds` - computes the folds of the source
+fn if_enabled<I: Iterator<Item = Fold>>(
+    enabled: bool,
+    folds: impl FnOnce() -> I,
+) -> impl Iterator<Item = Fold> {
+    enabled.then(folds).into_iter().flatten()
 }
 
 /// Returns the line of a byte offset.
@@ -205,8 +206,21 @@ mod tests {
 
     #[test]
     fn subckt_block_leaves_closer_visible() {
-        let folds = folds_of("t\n.subckt a x\nR1 x 0 1\nR2 x 0 2\n.ends\n.end\n");
+        let mut settings = Settings::default();
+        settings.folding.blocks = true;
+        let folds = folds_with(
+            "t\n.subckt a x\nR1 x 0 1\nR2 x 0 2\n.ends\n.end\n",
+            settings,
+        );
         assert!(folds.contains(&(1, 3, Some(FoldingRangeKind::Region))));
+    }
+
+    #[test]
+    fn blocks_and_alter_sections_do_not_fold_by_default() {
+        let folds = folds_of(
+            "t\n.subckt a x\nR1 x 0 1\nR2 x 0 2\n.ends\n.alter first\nR1 a b 2\nR2 a b 2\n.end\n",
+        );
+        assert!(folds.is_empty());
     }
 
     #[test]
@@ -250,8 +264,11 @@ mod tests {
 
     #[test]
     fn alter_sections_fold_to_the_next_alter() {
-        let folds = folds_of(
+        let mut settings = Settings::default();
+        settings.folding.alter = true;
+        let folds = folds_with(
             "t\nR1 a b 1\n.alter first\nR1 a b 2\nR2 a b 2\n.alter second\nR1 a b 3\n.end\n",
+            settings,
         );
         assert!(folds.contains(&(2, 4, Some(FoldingRangeKind::Region))));
         assert!(folds.contains(&(5, 6, Some(FoldingRangeKind::Region))));
@@ -260,11 +277,9 @@ mod tests {
     #[test]
     fn fixture_include_folds_its_subckt() {
         let root = crate::test_support::fixtures();
-        let mut workspace = Workspace::new(
-            Some(root.clone()),
-            PositionEncoding::Utf16,
-            Settings::default(),
-        );
+        let mut settings = Settings::default();
+        settings.folding.blocks = true;
+        let mut workspace = Workspace::new(Some(root.clone()), PositionEncoding::Utf16, settings);
         let path = root.join("cells/inv.inc");
         let text = std::fs::read_to_string(&path).unwrap_or_default();
         let Some(uri) = Uri::from_file_path(&path) else {

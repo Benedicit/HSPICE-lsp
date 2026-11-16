@@ -375,6 +375,10 @@ fn full_session_utf16() {
     );
 
     // folding on a file with blocks
+    client.notify(
+        "workspace/didChangeConfiguration",
+        json!({"settings": {"hspice": {"folding": {"blocks": true}}}}),
+    );
     let ring_path = fixtures().join("ring_osc.sp");
     let ring_uri = file_uri(&ring_path);
     client.open(

@@ -48,6 +48,10 @@ pub struct InlayHintSettings {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct FoldingSettings {
+    /// Fold `.subckt`, `.lib`, `.if`, `.data` and other blocks.
+    pub blocks: bool,
+    /// Fold `.alter` sections.
+    pub alter: bool,
     /// Fold runs of consecutive comment lines.
     pub comments: bool,
     /// Fold statements continued over several lines with `+`.
@@ -133,6 +137,8 @@ mod tests {
         assert!(!settings.diagnostics.floating_nodes);
         assert!(settings.diagnostics.meg_suffix);
         assert_eq!(settings.workspace_scan.max_files, 500);
+        assert!(!settings.folding.blocks);
+        assert!(!settings.folding.alter);
         assert!(!settings.folding.comments);
         assert!(!settings.folding.continuations);
     }
