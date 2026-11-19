@@ -624,6 +624,21 @@ fn mosra_combination_rules() {
         &format!("{stress}.tran 1n 10n\n.end\n"),
         "mosra-without-tran"
     ));
+    let level3 = ".model rel mosra level=3\n.tran 1n 10n\n.dc V1 0 1 0.1\n.end\n";
+    assert_eq!(
+        run(&format!("{stress}{level3}")),
+        vec![("mosra-level3-dc", Severity::Warning)]
+    );
+    assert_eq!(
+        run(&format!(
+            "{BASE}.mosra reltotaltime=1e8 simmode=1\n{level3}"
+        )),
+        vec![("mosra-level3-dc", Severity::Warning)]
+    );
+    assert!(only(
+        &format!("{BASE}.model rel mosra level=1\n.tran 1n 10n\n.dc V1 0 1 0.1\n.end\n"),
+        &[]
+    ));
     let alter = format!(
         "{stress}.tran 1n 10n\n.model nra mosra level=1\n.alter aged\n.model nra mosra level=1 tit0=1\n.appendmodel nra mosra nch nmos\n.end\n"
     );
@@ -870,6 +885,122 @@ fn source_function_rules() {
         "source-args"
     ));
     assert!(!has(&source("dc 1 ac 1"), "source-args"));
+}
+
+#[test]
+fn keyword_words_are_not_parameters() {
+    let lines = [
+        "V2 b 0 PWL(0 0 1n 1 2n 0) R",
+        "V2 b 0 PWL(0 0 1n 1 2n 0 R 1n)",
+        "I2 b 0 pwl 0 0 1n 1 R TD=1n",
+        "V2 b 0 PAT(1 0 0 1p 1p 1n b1010) RB=1 R=2",
+        "V2 b 0 PAT 1 0 0 1p 1p 1n b101",
+        "V2 b 0 PWL(TIME, pv)\n.param pv=1",
+        "E2 b 0 AND(2) a 0 c 0 0 0 1 1\nV3 c 0 1",
+        "C2 a b POLY 0 1p 2p",
+        "L2 a b L=INFINITY",
+        "P2 b 0 port=2 HBAC 1 2",
+    ];
+    for line in lines {
+        let text = format!("{BASE}{line}\nR2 b 0 1k\n.tran 1n 10n\n.end\n");
+        assert!(
+            !has(&text, "undefined-param") && !has(&text, "undefined-model"),
+            "{line}"
+        );
+    }
+    assert!(has(
+        &format!("{BASE}V2 b 0 PULSE(0 vnone)\nR2 b 0 1k\n"),
+        "undefined-param"
+    ));
+}
+
+#[test]
+fn measure_argument_rules() {
+    let measure =
+        |body: &str| format!("{BASE}.param vdd=1\n.tran 1n 10n\n.meas tran m {body}\n.end\n");
+    for body in [
+        "integ 5 from=0 to=1n",
+        "avg vdd",
+        "integral 'vdd*2'",
+        "trig 1 val=0.5 rise=1 targ v(a) val=0.5 fall=1",
+    ] {
+        assert!(
+            run(&measure(body)).contains(&("measure-scalar-subject", Severity::Warning)),
+            "{body}"
+        );
+    }
+    for body in [
+        "integ v(a)",
+        "avg power",
+        "avg 'v(a)*2'",
+        "avg par('v(a)+1')",
+        "find v(a) at=1n",
+    ] {
+        assert!(!has(&measure(body), "measure-scalar-subject"), "{body}");
+    }
+    assert!(!has(
+        &format!("{BASE}.tran 1n 10n\n.meas tran max max v(a)\n"),
+        "measure-scalar-subject"
+    ));
+    for body in ["avg v(a) from=1n", "avg v(a) from 0"] {
+        assert!(
+            run(&measure(body)).contains(&("measure-from-without-to", Severity::Warning)),
+            "{body}"
+        );
+    }
+    for body in [
+        "avg v(a) from=0 to=1n",
+        "avg v(a) from 0 to 1n",
+        "avg v(a) to=1n",
+    ] {
+        assert!(!has(&measure(body), "measure-from-without-to"), "{body}");
+    }
+}
+
+#[test]
+fn data_block_lines() {
+    let false_alarms = [
+        "syntax-error",
+        "missing-nodes",
+        "duplicate-element",
+        "floating-node",
+        "unused-param",
+    ];
+    let inline = "t\n.param vds=0 vbs=0 l=1u w2=1u\nVBS 3 0 vbs\nVDS 3 0 vds\nR1 3 0 l\n.dc data=vdot\n.data vdot\nVBS VDS L\n0 0.1 1.5u\n-1 .1, 1u\n'vds*2' 3 1u\n.enddata\n.data d1 vds\nw2\n1 2\n.enddata\n.end\n";
+    let files = "t\n.param p1=0 p2=0 p3=0\nV1 a 0 p1\nR1 a 0 1k\n.dc data=m\n.data m MER\nFILE=file1 p1=1 p2=3\nFILE=file3\n.enddata\n.data n LAM\nFILE=file2 p3=1\nOUT=fileout\n.enddata\n.end\n";
+    for text in [inline, files] {
+        let found = run(text);
+        assert!(
+            found.iter().all(|(code, _)| !false_alarms.contains(code)),
+            "{found:?}"
+        );
+    }
+    assert!(has(
+        &format!("{BASE}.data d a\n1\n.enddata\n1 2\n"),
+        "syntax-error"
+    ));
+    assert!(has(
+        &format!("{BASE}R2 a b 1k\n.data d a\n1\n.enddata\n.tran 1n 10n\n.end\n"),
+        "floating-node"
+    ));
+}
+
+#[test]
+fn table_function_reads_data_blocks_and_pairs() {
+    let noise = |value: &str| {
+        format!("{BASE}.data dn\n+ f v\n+ 1k 1e-9\n.enddata\nG1 a 0 noise='{value}'\n.end\n")
+    };
+    for value in ["TABLE(hertz, dn)", "table(hertz, 1k, 1e-9, 1meg, 1e-12)"] {
+        let found = run(&noise(value));
+        assert!(
+            found.iter().all(|(code, _)| !matches!(
+                *code,
+                "undefined-function" | "function-arity" | "undefined-param"
+            )),
+            "{value}: {found:?}"
+        );
+    }
+    assert!(run(&noise("table(1)")).contains(&("function-arity", Severity::Error)));
 }
 
 #[test]

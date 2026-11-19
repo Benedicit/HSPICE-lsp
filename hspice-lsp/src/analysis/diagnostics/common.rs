@@ -6,6 +6,7 @@ use super::{Diagnostic, Severity};
 use crate::analysis::Analysis;
 use crate::analysis::blocks::BlockKind;
 use crate::analysis::symbols::Symbol;
+use crate::lang::commands::find_command;
 use crate::state::document::SyntaxInfo;
 use crate::syntax::ast::{Command, Element, Statement, StatementKind, TextRange};
 
@@ -42,6 +43,14 @@ pub fn live_commands<'a>(
         StatementKind::Command(command) => Some((index, command, statement.range)),
         _ => None,
     })
+}
+
+/// Returns true for `.measure` / `.meas`.
+///
+/// # Arguments
+/// * `command` - dot command
+pub fn is_measure(command: &Command) -> bool {
+    find_command(&command.keyword.key).is_some_and(|spec| spec.name == ".measure")
 }
 
 /// Iterates over all live element lines with their statement index.

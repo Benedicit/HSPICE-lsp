@@ -5,6 +5,7 @@ mod commands;
 mod common;
 mod elements;
 mod functions;
+mod measure_args;
 mod mosra_conflicts;
 mod nodes;
 mod numbers;
@@ -114,6 +115,7 @@ pub fn compute(
         .chain(floating)
         .chain(commands::check(syntax, analysis, settings))
         .chain(analyses::check(syntax, analysis))
+        .chain(measure_args::check(syntax, analysis))
         .chain(mosra_conflicts::check(syntax, analysis))
         .chain(params::check(syntax, analysis, settings))
         .chain(numbers::check(syntax, analysis, settings))
@@ -123,23 +125,21 @@ pub fn compute(
     diagnostics
 }
 
-/// Reports tree-sitter syntax errors, except inside opaque regions (variation blocks, encrypted text).
+/// Reports tree-sitter syntax errors, except inside opaque regions (variation blocks, encrypted text)
+/// and on the lines of `.data` blocks.
 ///
 /// # Arguments
 /// * `syntax` - parse results
-/// * `analysis` - analysis (for opaque statements)
+/// * `analysis` - analysis (for opaque statements and data rows)
 fn syntax_diagnostics(syntax: &SyntaxInfo, analysis: &Analysis) -> Vec<Diagnostic> {
+    let structure = &analysis.structure;
     syntax
         .errors
         .iter()
         .filter(|error| {
             crate::analysis::statement_at(&syntax.netlist, error.range.start).is_none_or(|index| {
-                !analysis
-                    .structure
-                    .opaque
-                    .get(index)
-                    .copied()
-                    .unwrap_or(false)
+                !structure.opaque.get(index).copied().unwrap_or(false)
+                    && !structure.is_data_row(index)
             })
         })
         .map(|error| {

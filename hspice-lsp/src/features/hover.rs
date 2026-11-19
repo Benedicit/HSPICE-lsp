@@ -966,13 +966,23 @@ fn call_text(context: Context, name: &Ident) -> Option<String> {
 /// # Arguments
 /// * `spec` - source function table entry
 fn source_function_text(spec: &SourceFunctionSpec) -> String {
+    let count = if spec.is_piecewise() {
+        format!(
+            "At least {} arguments required; any number of further pairs may follow.",
+            spec.required
+        )
+    } else {
+        format!(
+            "{} of {} arguments required.",
+            spec.required,
+            spec.arguments.len()
+        )
+    };
     format!(
-        "```spice\n{}\n```\n{}{}\n\n{} of {} arguments required.",
+        "```spice\n{}\n```\n{}{}\n\n{count}",
         spec.signature(),
         spec.description,
         argument_docs(spec.arguments),
-        spec.required,
-        spec.arguments.len()
     )
 }
 
@@ -1266,6 +1276,8 @@ mod tests {
         assert!(text_of("* t\nR1 a b 'ti|me'").contains("predefined variable"));
         assert!(text_of("* t\n.print tran v|(a)").contains("V(n1<,n2>)"));
         assert!(text_of("* t\nVin a 0 pu|lse(0 1)").contains("PULSE(v1 v2"));
+        let pwl = text_of("* t\nVin a 0 pw|l(0 0 1n 1 2n 0) R");
+        assert!(pwl.contains("PWL(t1 v1 t2 v2 …)") && pwl.contains("any number of further pairs"));
         let user = text_of("* t\n.param f(x)='x*2'\nR1 a b 'f|(3)'");
         assert!(user.contains("user function") && user.contains("f(x)"));
     }

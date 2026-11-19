@@ -3,7 +3,9 @@
 use std::collections::{HashMap, HashSet};
 
 use super::blocks::{BlockKind, Structure};
-use super::roles::{ElementRoles, NameKinds, assign_roles, assignments, is_element_keyword};
+use super::roles::{
+    ElementRoles, NameKinds, assign_roles, assignments, is_element_keyword, source_calls,
+};
 use super::symbols::{
     Origin, ParamSource, ROOT_SCOPE, RefContext, Reference, ScopeId, Symbol, SymbolDetail,
     SymbolId, SymbolKind, SymbolTable,
@@ -15,7 +17,7 @@ use crate::lang::output_vars::{OutputArgKind, find_output_var, output_argument};
 use crate::lang::{KeywordSpec, find_named};
 use crate::syntax::ast::{
     Arg, AssignKey, Assignment, Call, Command, CommandKind, Element, Expr, ExprKind, Ident,
-    Netlist, ParamDef, StatementKind, Value,
+    Netlist, ParamDef, StatementKind, TextRange, Value,
 };
 
 /// Role information of one element line.
@@ -110,7 +112,38 @@ pub fn collect_definitions(
                 section: structure.statement_section.get(index).cloned().flatten(),
             };
             let scope = structure.scope_of(index);
-            command_definitions(command, index, scope, structure, &context)
+            match &command.kind {
+                CommandKind::Generic { args } if command.keyword.key == ".data" => {
+                    let rows = data_block_rows(netlist, structure, index);
+                    data_definitions(args, &rows, index, &context)
+                }
+                _ => command_definitions(command, index, scope, structure, &context),
+            }
+        })
+        .collect()
+}
+
+/// Returns the lines of the `.data` block opened at `index` that lowered to elements (plain header
+/// lines such as `VBS VDS L` and `FILE=` rows written without `+`).
+///
+/// # Arguments
+/// * `netlist` - lowered document
+/// * `structure` - block structure (data rows)
+/// * `index` - statement index of the `.data` command
+fn data_block_rows<'a>(
+    netlist: &'a Netlist,
+    structure: &Structure,
+    index: usize,
+) -> Vec<&'a Element> {
+    netlist
+        .statements
+        .iter()
+        .enumerate()
+        .skip(index + 1)
+        .take_while(|(row, _)| structure.is_data_row(*row))
+        .filter_map(|(_, statement)| match &statement.kind {
+            StatementKind::Element(element) => Some(element),
+            _ => None,
         })
         .collect()
 }
@@ -209,7 +242,6 @@ fn command_definitions(
                     )]
                 })
                 .unwrap_or_default(),
-            ".data" => data_definitions(args, index, context),
             _ => Vec::new(),
         },
         _ => Vec::new(),
@@ -301,33 +333,59 @@ fn measure_name(args: &[Arg]) -> Option<Ident> {
     starts_with_word.then(|| (*name).clone())
 }
 
-/// Returns the `.data` block symbol and its column parameters.
+/// Returns the `.data` block symbol and its column parameters, including columns named on plain
+/// header lines and in `FILE=` rows.
 ///
 /// # Arguments
 /// * `args` - `.data` arguments
+/// * `rows` - block lines that lowered to elements (see `data_block_rows`)
 /// * `index` - statement index
 /// * `context` - origin, range and section
-fn data_definitions(args: &[Arg], index: usize, context: &DefinitionContext) -> Vec<Symbol> {
+fn data_definitions(
+    args: &[Arg],
+    rows: &[&Element],
+    index: usize,
+    context: &DefinitionContext,
+) -> Vec<Symbol> {
     let words = positional_words(args);
     let Some(name) = words.first() else {
         return Vec::new();
     };
+    let file_mode = words
+        .iter()
+        .any(|word| matches!(word.key.as_str(), "mer" | "lam"));
+    let names_only = !file_mode
+        && args
+            .iter()
+            .skip(1)
+            .all(|arg| matches!(arg, Arg::Value(Value::Word(_))));
     let inline_columns = args.iter().skip(1).map_while(|arg| match arg {
         Arg::Value(Value::Word(word)) if !matches!(word.key.as_str(), "mer" | "lam") => {
             Some(word.clone())
         }
         _ => None,
     });
-    let file_columns = args.iter().filter_map(|arg| match arg {
-        Arg::Assign(assignment) => match &assignment.key {
-            AssignKey::Name(key) if !matches!(key.key.as_str(), "file" | "out") => {
-                Some(key.clone())
-            }
+    let header_rows: &[&Element] = if names_only { rows } else { &[] };
+    let header_columns = header_rows
+        .iter()
+        .map_while(|row| header_names(row))
+        .flatten();
+    let file_columns = args
+        .iter()
+        .chain(rows.iter().flat_map(|row| row.args.iter()))
+        .filter_map(|arg| match arg {
+            Arg::Assign(assignment) => match &assignment.key {
+                AssignKey::Name(key) if !matches!(key.key.as_str(), "file" | "out") => {
+                    Some(key.clone())
+                }
+                _ => None,
+            },
             _ => None,
-        },
-        _ => None,
-    });
-    let columns: Vec<Ident> = inline_columns.chain(file_columns).collect();
+        });
+    let columns: Vec<Ident> = inline_columns
+        .chain(header_columns)
+        .chain(file_columns)
+        .collect();
     let column_symbols = columns.iter().map(|column| {
         new_symbol(
             SymbolKind::Param,
@@ -355,7 +413,23 @@ fn data_definitions(args: &[Arg], index: usize, context: &DefinitionContext) -> 
     .collect()
 }
 
-/// Collects element infos with role assignment, using the definitions known so far for tie-breaking.
+/// Returns the column names of a plain `.data` header line such as `VBS VDS L`, if it holds only words.
+///
+/// # Arguments
+/// * `row` - data line that lowered to an element
+fn header_names(row: &Element) -> Option<Vec<Ident>> {
+    row.args
+        .iter()
+        .map(|arg| match arg {
+            Arg::Value(Value::Word(word)) => Some(word.clone()),
+            _ => None,
+        })
+        .collect::<Option<Vec<Ident>>>()
+        .map(|words| std::iter::once(row.name.clone()).chain(words).collect())
+}
+
+/// Collects element infos with role assignment, using the definitions known so far for tie-breaking;
+/// lines inside `.data` blocks are not elements.
 ///
 /// # Arguments
 /// * `netlist` - lowered document
@@ -371,6 +445,7 @@ fn collect_elements(
         .statements
         .iter()
         .enumerate()
+        .filter(|(index, _)| !structure.is_data_row(*index))
         .filter_map(|(index, statement)| match &statement.kind {
             StatementKind::Element(element) => Some((index, element)),
             _ => None,
@@ -785,6 +860,10 @@ impl Collector<'_> {
             };
             Pending::new(ELEMENT, name, scope, context)
         });
+        let data_words: Vec<TextRange> = source_calls(element)
+            .iter()
+            .filter_map(|call| call.data_word().map(|word| word.range))
+            .collect();
         let values = roles
             .values
             .iter()
@@ -807,6 +886,7 @@ impl Collector<'_> {
             .chain(controls)
             .chain(values)
             .chain(instance_params)
+            .filter(|pending| !data_words.contains(&pending.name.range))
             .collect()
     }
 
@@ -858,10 +938,16 @@ impl Collector<'_> {
     ) -> Vec<Pending> {
         match value {
             Value::Word(word)
-                if !is_element_keyword(spec, &word.key) && is_plain_name(&word.text) =>
+                if !is_element_keyword(spec, &word.key)
+                    && find_special_variable(&word.key).is_none()
+                    && is_plain_name(&word.text) =>
             {
                 vec![Pending::new(PARAM, word, scope, RefContext::ValueWord)]
             }
+            Value::Expr(Expr {
+                kind: ExprKind::Ident(word),
+                ..
+            }) if is_element_keyword(spec, &word.key) => Vec::new(),
             Value::Expr(expr) => expr_refs(expr, scope, &[]),
             Value::Call(call) => self.call_refs(call, spec, scope),
             _ => Vec::new(),

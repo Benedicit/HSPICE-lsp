@@ -77,6 +77,9 @@ pub struct Structure {
     pub skipped: Vec<bool>,
     /// True inside `.variation` blocks and encrypted `.prot <method>` regions (no syntax errors reported).
     pub opaque: Vec<bool>,
+    /// True for the lines inside `.data` blocks that are not dot commands (values, plain headers,
+    /// `FILE=` rows): no syntax errors, no semantics.
+    pub data_rows: Vec<bool>,
     /// Closers (`.ends`, `.endl`, `.endif` …) and `.else`/`.elseif` without a matching opener.
     pub unmatched: Vec<usize>,
 }
@@ -88,6 +91,14 @@ impl Structure {
     /// * `statement` - statement index
     pub fn is_skipped(&self, statement: usize) -> bool {
         self.skipped.get(statement).copied().unwrap_or(false)
+    }
+
+    /// Returns true if a statement is a line inside a `.data` block.
+    ///
+    /// # Arguments
+    /// * `statement` - statement index
+    pub fn is_data_row(&self, statement: usize) -> bool {
+        self.data_rows.get(statement).copied().unwrap_or(false)
     }
 
     /// Returns the scope of a statement.
@@ -339,6 +350,7 @@ pub fn build_structure(netlist: &Netlist) -> Structure {
             statement_alter: Vec::with_capacity(netlist.statements.len()),
             skipped: Vec::with_capacity(netlist.statements.len()),
             opaque: Vec::with_capacity(netlist.statements.len()),
+            data_rows: Vec::with_capacity(netlist.statements.len()),
             unmatched: Vec::new(),
         },
         open_blocks: Vec::new(),
@@ -361,7 +373,9 @@ pub fn build_structure(netlist: &Netlist) -> Structure {
             builder.extend_open(statement.range);
             let scope_before = builder.current_scope();
             let opaque = builder.inside(BlockKind::Variation) || builder.in_encrypted_region;
-            let skipped = opaque || matches!(statement.kind, StatementKind::Error);
+            let data_row = builder.inside(BlockKind::Data)
+                && !matches!(statement.kind, StatementKind::Command(_));
+            let skipped = opaque || data_row || matches!(statement.kind, StatementKind::Error);
             let section = builder.current_section();
             match role {
                 BlockRole::Open(kind, name) => builder.open(kind, name, index, statement.range),
@@ -378,6 +392,7 @@ pub fn build_structure(netlist: &Netlist) -> Structure {
             builder.structure.statement_alter.push(builder.alter);
             builder.structure.skipped.push(skipped);
             builder.structure.opaque.push(opaque);
+            builder.structure.data_rows.push(data_row);
         });
     builder.structure
 }
@@ -431,5 +446,13 @@ mod tests {
         assert!(!structure.opaque[3]);
         assert!(structure.opaque[4]);
         assert!(!structure.opaque[5]);
+    }
+
+    #[test]
+    fn data_block_lines_are_data_rows() {
+        let structure = structure_of(".data d a b\n1 2\n'a*2' 3\n.enddata\n1 2\n");
+        assert_eq!(structure.data_rows, vec![false, true, true, false, false]);
+        assert!(structure.opaque.iter().all(|opaque| !opaque));
+        assert!(structure.is_skipped(1) && structure.is_skipped(2));
     }
 }

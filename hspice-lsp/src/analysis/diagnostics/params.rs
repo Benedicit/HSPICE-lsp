@@ -3,19 +3,18 @@
 
 use std::collections::HashSet;
 
-use super::common::{live_commands, repeated_definitions};
+use super::common::{is_measure, live_commands, repeated_definitions};
 use super::walk::flatten_expression;
 use super::{Diagnostic, Severity};
 use crate::analysis::Analysis;
 use crate::analysis::symbols::{ParamSource, ScopeId, SymbolDetail, SymbolKind};
 use crate::config::DiagnosticSettings;
-use crate::lang::commands::find_command;
 use crate::lang::functions::{find_function, find_special_variable};
 use crate::lang::measure::find_measure_keyword;
 use crate::lang::output_vars::{OutputArgKind, output_argument};
 use crate::state::document::SyntaxInfo;
 use crate::syntax::ast::{
-    Arg, AssignKey, Assignment, Command, CommandKind, Expr, ExprKind, Ident, ParamDef, Value,
+    Arg, AssignKey, Assignment, CommandKind, Expr, ExprKind, Ident, ParamDef, Value,
 };
 use crate::syntax::number::parse_number;
 
@@ -43,14 +42,6 @@ pub fn check(
                 .flatten(),
         )
         .collect()
-}
-
-/// Returns true for `.measure` / `.meas`.
-///
-/// # Arguments
-/// * `command` - dot command
-fn is_measure(command: &Command) -> bool {
-    find_command(&command.keyword.key).is_some_and(|spec| spec.name == ".measure")
 }
 
 /// Returns the name of the first node or element output variable called in an expression.

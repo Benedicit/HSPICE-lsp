@@ -11,7 +11,7 @@ pub struct FunctionSpec {
     pub aliases: &'static [&'static str],
     /// Minimum number of arguments.
     pub min_args: usize,
-    /// Maximum number of arguments.
+    /// Maximum number of arguments; `usize::MAX` for any number.
     pub max_args: usize,
     /// Signature for hover and signature help, e.g. `pow(x, y)`.
     pub signature: &'static str,
@@ -330,6 +330,15 @@ pub static FUNCTIONS: &[FunctionSpec] = &[
         description: "Nominal plus or minus the absolute variation, chosen randomly",
     },
     FunctionSpec {
+        name: "table",
+        aliases: &[],
+        min_args: 2,
+        max_args: usize::MAX,
+        signature: "table(x, data | x1, y1, x2, y2, …)",
+        parameters: &["x", "data"],
+        description: "Table lookup at x from a .DATA block or inline x/y pairs (behavioral noise sources)",
+    },
+    FunctionSpec {
         name: "val",
         aliases: &[],
         min_args: 1,
@@ -431,6 +440,7 @@ mod tests {
             Some((3, 4))
         );
         assert!(find_function("bogus").is_none());
+        assert!(find_function("Table").is_some_and(|f| f.max_args == usize::MAX));
     }
 
     #[test]
@@ -451,7 +461,9 @@ mod tests {
         assert_unique_lowercase(FUNCTIONS);
         for function in FUNCTIONS {
             assert!(function.min_args <= function.max_args);
-            assert!(function.parameters.len() >= function.max_args);
+            assert!(
+                function.max_args == usize::MAX || function.parameters.len() >= function.max_args
+            );
             assert!(function.signature.starts_with(function.name));
             assert!(!function.description.is_empty());
         }

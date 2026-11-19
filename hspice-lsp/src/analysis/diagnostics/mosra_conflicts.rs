@@ -1,8 +1,10 @@
-//! `.MOSRA` combination rules: sweeps, `.DC`/`.AC`, a missing `.TRAN` and MOSRA models in `.ALTER` sections.
+//! `.MOSRA` combination rules: sweeps, `.DC`/`.AC`, a missing `.TRAN`, MOSRA models in `.ALTER` sections
+//! and `.DC` with LEVEL=3 MOSRA models.
 
 use super::common::live_commands;
 use super::{Diagnostic, Severity};
 use crate::analysis::Analysis;
+use crate::analysis::symbols::{SymbolDetail, SymbolKind};
 use crate::state::document::SyntaxInfo;
 use crate::syntax::ast::{Arg, AssignKey, Command, CommandKind, Ident, Value};
 use crate::syntax::number::parse_number;
@@ -24,10 +26,31 @@ pub fn check(syntax: &SyntaxInfo, analysis: &Analysis) -> Vec<Diagnostic> {
     let has_tran = commands
         .iter()
         .any(|(_, command)| command.keyword.key == ".tran");
+    let level3_model = level3_model(analysis);
+    let level3_dc = level3_model.into_iter().flat_map(|model| {
+        commands
+            .iter()
+            .filter(|(_, command)| command.keyword.key == ".dc")
+            .map(move |(_, command)| {
+                Diagnostic::new(
+                    command.keyword.range,
+                    Severity::Warning,
+                    "mosra-level3-dc",
+                    format!(
+                        "`.DC` analysis is not possible with the MOSRA LEVEL=3 model `{}`",
+                        model.text
+                    ),
+                )
+            })
+    });
     let analyses = commands
         .iter()
         .filter(|_| !stress_runs.is_empty())
-        .flat_map(|(_, command)| sweep(command).into_iter().chain(dc_ac(command)));
+        .flat_map(|(_, command)| {
+            sweep(command).into_iter().chain(
+                dc_ac(command).filter(|_| level3_model.is_none() || command.keyword.key != ".dc"),
+            )
+        });
     let missing_tran = stress_runs
         .iter()
         .filter(|_| syntax.is_top_level && !has_tran)
@@ -41,8 +64,30 @@ pub fn check(syntax: &SyntaxInfo, analysis: &Analysis) -> Vec<Diagnostic> {
         });
     analyses
         .chain(missing_tran)
+        .chain(level3_dc)
         .chain(models_in_alter(analysis, &commands))
         .collect()
+}
+
+/// Returns the name of the first `.model … mosra level=3` card, local or included.
+///
+/// # Arguments
+/// * `analysis` - semantic analysis
+fn level3_model(analysis: &Analysis) -> Option<&Ident> {
+    analysis
+        .symbols
+        .iter()
+        .filter(|symbol| symbol.kind == SymbolKind::Model)
+        .find(|symbol| {
+            matches!(
+                &symbol.detail,
+                SymbolDetail::Model {
+                    model_type: Some(model_type),
+                    level: Some(level),
+                } if model_type.key == "mosra" && (*level - 3.0).abs() < f64::EPSILON
+            )
+        })
+        .map(|symbol| &symbol.name)
 }
 
 /// Returns true for a `.mosra` command that simulates the stress phase (`SIMMODE` absent or a literal other than 1).

@@ -70,6 +70,21 @@ pub struct SourceCall<'a> {
     pub parenthesised: bool,
 }
 
+impl SourceCall<'_> {
+    /// Returns the word in the `data` argument slot (a `PAT` bit string or `.PAT` name), which never names a parameter.
+    pub fn data_word(&self) -> Option<&Ident> {
+        let index = self
+            .function
+            .arguments
+            .iter()
+            .position(|argument| argument.name == "data")?;
+        match self.args.get(index) {
+            Some(Arg::Value(Value::Word(word))) => Some(word),
+            _ => None,
+        }
+    }
+}
+
 /// Returns the transient source functions written on an element line, in both forms.
 ///
 /// # Arguments
@@ -142,7 +157,7 @@ pub fn assign_roles(
         'X' => subckt_instance_roles(&positionals),
         'M' | 'Q' | 'J' => optional_fourth_node_roles(&positionals, names),
         'D' => fixed_nodes_roles(&positionals, 2, true),
-        'R' | 'C' | 'L' => passive_roles(&positionals, names),
+        'R' | 'C' | 'L' => passive_roles(&positionals, spec, names),
         'V' | 'I' | 'P' => fixed_nodes_roles(&positionals, 2, false),
         'E' | 'G' => voltage_controlled_roles(element, &positionals),
         'F' | 'H' => current_controlled_roles(&positionals),
@@ -262,17 +277,27 @@ fn fixed_nodes_roles(positionals: &[&Value], node_count: usize, has_model: bool)
     }
 }
 
-/// R/C/L elements: an optional model when a value follows it or when the name is a known model.
+/// R/C/L elements: an optional model when a value follows it or when the name is a known model;
+/// keywords such as `POLY` are never models.
 ///
 /// # Arguments
 /// * `positionals` - positional values
+/// * `spec` - element type (for keywords)
 /// * `names` - model lookups
-fn passive_roles(positionals: &[&Value], names: &NameKinds) -> ElementRoles {
+fn passive_roles(
+    positionals: &[&Value],
+    spec: Option<&ElementSpec>,
+    names: &NameKinds,
+) -> ElementRoles {
     let (nodes, rest) = take_nodes(positionals, 2);
-    let is_model = rest.first().and_then(word).is_some_and(|name| {
-        (names.is_model)(&name.key)
-            || (rest.len() > 1 && !rest[1..].iter().all(|value| word(value).is_some()))
-    });
+    let is_model = rest
+        .first()
+        .and_then(word)
+        .filter(|name| !is_element_keyword(spec, &name.key))
+        .is_some_and(|name| {
+            (names.is_model)(&name.key)
+                || (rest.len() > 1 && !rest[1..].iter().all(|value| word(value).is_some()))
+        });
     let reference = is_model
         .then(|| rest.first().and_then(word).cloned())
         .flatten();
@@ -288,15 +313,15 @@ fn passive_roles(positionals: &[&Value], names: &NameKinds) -> ElementRoles {
     }
 }
 
-/// Returns the dimension of a `POLY(n)` call, if `value` is one.
+/// Returns the number of controlling inputs of a `POLY(n)` or gate (`AND(k)` …) call, if `value` is one.
 ///
 /// # Arguments
 /// * `value` - positional value
-fn poly_dimension(value: &Value) -> Option<usize> {
+fn control_dimension(value: &Value) -> Option<usize> {
     let Value::Call(Call { name, args, .. }) = value else {
         return None;
     };
-    if name.key != "poly" {
+    if !matches!(name.key.as_str(), "poly" | "and" | "nand" | "or" | "nor") {
         return None;
     }
     match args.first() {
@@ -371,10 +396,10 @@ fn voltage_controlled_roles(element: &Element, positionals: &[&Value]) -> Elemen
     }
     let keyword_count = rest
         .iter()
-        .take_while(|value| is_source_keyword(value) && poly_dimension(value).is_none())
+        .take_while(|value| is_source_keyword(value) && control_dimension(value).is_none())
         .count();
     let after_keywords = &rest[keyword_count..];
-    let (dimension, skip) = match after_keywords.first().and_then(poly_dimension) {
+    let (dimension, skip) = match after_keywords.first().and_then(control_dimension) {
         Some(dimension) => (dimension, 1),
         None => (poly_assignment.unwrap_or(1), 0),
     };
@@ -402,12 +427,12 @@ fn current_controlled_roles(positionals: &[&Value]) -> ElementRoles {
     let (nodes, rest) = take_nodes(positionals, 2);
     let keyword_count = rest
         .iter()
-        .take_while(|value| is_source_keyword(value) && poly_dimension(value).is_none())
+        .take_while(|value| is_source_keyword(value) && control_dimension(value).is_none())
         .count();
     let after_keywords = &rest[keyword_count..];
     let (dimension, skip) = after_keywords
         .first()
-        .and_then(poly_dimension)
+        .and_then(control_dimension)
         .map_or((1, 0), |dimension| (dimension, 1));
     let controls: Vec<Ident> = after_keywords[skip..]
         .iter()
@@ -560,6 +585,7 @@ mod tests {
             model_then_value.reference.map(|name| name.key),
             Some("rpoly".into())
         );
+        assert!(roles_of("C1 a b POLY 0 1p\n", &[]).reference.is_none());
     }
 
     #[test]
@@ -575,6 +601,10 @@ mod tests {
         assert_eq!(keys(&keyword.control_nodes), vec!["out", "0"]);
         let current = roles_of("F1 c 0 vsense 2\n", &[]);
         assert_eq!(keys(&current.controls), vec!["vsense"]);
+        let gate = roles_of("E4 o 0 AND(2) a 0 b 0 0 0 1 1\n", &[]);
+        assert_eq!(keys(&gate.control_nodes), vec!["a", "0", "b", "0"]);
+        let current_gate = roles_of("F2 o 0 NOR(2) v1 v2 0 0 1 1\n", &[]);
+        assert_eq!(keys(&current_gate.controls), vec!["v1", "v2"]);
     }
 
     #[test]

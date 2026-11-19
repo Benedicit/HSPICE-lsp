@@ -197,6 +197,7 @@ fn clean_fixtures_have_no_errors_or_warnings() {
     let files = [
         "inverter_tb.sp",
         "ring_osc.sp",
+        "data_sweep.sp",
         "cells/inv.inc",
         "models/tech.lib",
         "models/ptm45.pm",

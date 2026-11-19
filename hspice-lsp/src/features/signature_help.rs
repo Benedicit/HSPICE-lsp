@@ -129,26 +129,29 @@ fn call_signature(document: &Document, scan: &LineScan) -> Option<SignatureHelp>
     let first = scan.first_word();
     let source_line = is_source_element(&first) && !scan.in_quote();
     let key = frame.name.to_ascii_lowercase();
-    let active = Some(frame.argument_index());
-    let source = find_source_function(&key)
-        .filter(|_| source_line)
-        .map(|spec| {
-            let arguments: Vec<String> = spec
-                .arguments
-                .iter()
-                .map(|argument| argument.name.to_string())
-                .collect();
-            let label = spec.signature();
-            let descriptions: Vec<&str> = spec
-                .arguments
-                .iter()
-                .map(|argument| argument.description)
-                .collect();
-            with_parameter_docs(
-                signature(&label, &arguments, spec.description),
-                &descriptions,
-            )
-        });
+    let index = frame.argument_index();
+    let source_spec = find_source_function(&key).filter(|_| source_line);
+    let active = Some(match source_spec {
+        Some(spec) if spec.is_piecewise() && index >= 2 => 2 + index % 2,
+        _ => index,
+    });
+    let source = source_spec.map(|spec| {
+        let arguments: Vec<String> = spec
+            .arguments
+            .iter()
+            .map(|argument| argument.name.to_string())
+            .collect();
+        let label = spec.signature();
+        let descriptions: Vec<&str> = spec
+            .arguments
+            .iter()
+            .map(|argument| argument.description)
+            .collect();
+        with_parameter_docs(
+            signature(&label, &arguments, spec.description),
+            &descriptions,
+        )
+    });
     let user = || user_function_signature(document, scan, &key);
     let builtin = || {
         find_function(&key).map(|spec| {
@@ -414,6 +417,11 @@ mod tests {
         assert_eq!(first.active_parameter, Some(0));
         let typing = help_of("* t\nVin a 0 pulse(0 1|").expect("help");
         assert_eq!(typing.active_parameter, Some(1));
+        let pwl = help_of("* t\nVin a 0 pwl(0 0 1n 1 2n 0 |").expect("help");
+        assert_eq!(label_of(&pwl), "PWL(t1 v1 t2 v2 …)");
+        assert_eq!(pwl.active_parameter, Some(2));
+        let value = help_of("* t\nVin a 0 pwl(0 0 1n 1 2n 0 3n |").expect("help");
+        assert_eq!(value.active_parameter, Some(3));
         let params = result.signatures[0].parameters.clone().unwrap_or_default();
         assert_eq!(
             params[2].documentation,

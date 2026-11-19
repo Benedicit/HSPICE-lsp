@@ -81,14 +81,20 @@ impl Named for SourceFunctionSpec {
 }
 
 impl SourceFunctionSpec {
-    /// Returns the call form `NAME(arg arg ...)`.
+    /// Returns the call form `NAME(arg arg ...)`, ending in `…` for piecewise linear functions.
     pub fn signature(&self) -> String {
         let names: Vec<&str> = self
             .arguments
             .iter()
             .map(|argument| argument.name)
+            .chain(self.is_piecewise().then_some("…"))
             .collect();
         format!("{}({})", self.name.to_ascii_uppercase(), names.join(" "))
+    }
+
+    /// Returns true for the piecewise linear functions, which take any number of point pairs.
+    pub fn is_piecewise(&self) -> bool {
+        matches!(self.name, "pwl" | "pl" | "pwlz")
     }
 }
 
@@ -329,7 +335,7 @@ pub static ELEMENTS: &[ElementSpec] = &[
         ],
         keywords: &[
             "dc", "ac", "pulse", "pu", "sin", "exp", "pwl", "pl", "pwlz", "sffm", "am", "pat",
-            "lfsr", "data", "power", "imp",
+            "lfsr", "data", "power", "imp", "r",
         ],
         snippet: "V${1:1} ${2:n+} ${3:n-} DC ${4:0}",
     },
@@ -351,7 +357,7 @@ pub static ELEMENTS: &[ElementSpec] = &[
         ],
         keywords: &[
             "dc", "ac", "pulse", "pu", "sin", "exp", "pwl", "pl", "pwlz", "sffm", "am", "pat",
-            "lfsr", "data", "power", "imp",
+            "lfsr", "data", "power", "imp", "r",
         ],
         snippet: "I${1:1} ${2:n+} ${3:n-} DC ${4:0}",
     },
@@ -557,7 +563,7 @@ pub static ELEMENTS: &[ElementSpec] = &[
             param!("dc", "DC value"),
             param!("ac", "AC magnitude and phase"),
         ],
-        keywords: &["dc", "ac"],
+        keywords: &["dc", "ac", "hbac"],
         snippet: "P${1:1} ${2:p} ${3:n} PORT=${4:1} Z0=${5:50}",
     },
     ElementSpec {
@@ -762,7 +768,7 @@ pub static SOURCE_FUNCTIONS: &[SourceFunctionSpec] = &[
             },
         ],
         required: 2,
-        description: "Piecewise linear time/value pairs; also R[=repeat], TD=delay, PWLFILE=.",
+        description: "Piecewise linear waveform from any number of time/value pairs t1 v1 t2 v2 …; R[=repeat] repeats it from time `repeat`, TD= delays it, PWLFILE= reads the pairs from a file.",
     },
     SourceFunctionSpec {
         name: "pl",
@@ -786,7 +792,7 @@ pub static SOURCE_FUNCTIONS: &[SourceFunctionSpec] = &[
             },
         ],
         required: 2,
-        description: "Piecewise linear value/time pairs.",
+        description: "Piecewise linear waveform from any number of value/time pairs v1 t1 v2 t2 ….",
     },
     SourceFunctionSpec {
         name: "pwlz",
@@ -810,7 +816,7 @@ pub static SOURCE_FUNCTIONS: &[SourceFunctionSpec] = &[
             },
         ],
         required: 2,
-        description: "Piecewise linear variant with zero-order hold (see manual).",
+        description: "Piecewise linear variant with zero-order hold from any number of time/value pairs t1 v1 t2 v2 …; accepts R[=repeat] and TD= like PWL.",
     },
     SourceFunctionSpec {
         name: "sffm",

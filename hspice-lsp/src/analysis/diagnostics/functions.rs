@@ -44,6 +44,8 @@ fn arity_problem(analysis: &Analysis, scope: ScopeId, expr: &Expr) -> Option<Dia
     (got < min || got > max).then(|| {
         let expected = if min == max {
             min.to_string()
+        } else if max == usize::MAX {
+            format!("at least {min}")
         } else {
             format!("{min} to {max}")
         };

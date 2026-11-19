@@ -107,6 +107,7 @@ CONFLICT must be *accepted silently* (no error diagnostics).
 | 2–3 | unif(nom, rel[, mult]) aunif(nom, abs[, mult]) |
 | 3–4 | gauss(nom, rel, nsig[, mult]) agauss(nom, abs, nsig[, mult]) |
 | 2 | limit(nom, abs) |
+| ≥2 | table(x, data \| x1, y1, …) — lookup in a `.DATA` block or inline pairs (G `noise=`, User Guide H-2013.03) |
 | 3–4 | opt-style `OPTxxx(init, lo, hi[, delta])` (name is user-chosen; accept any call starting with `opt`) |
 - `sqrt log log10 db` keep the sign of the argument. `sign(x,y)` = |x| with sign of y. `def(x)` = 1 if param
   x is defined.
@@ -200,7 +201,7 @@ Keywords also: `DC`, `AC`, `power=`, `imp=`.
 | `.SUBCKT name nodes [p=v]` / `.MACRO` | `.ENDS [name]` / `.EOM [name]` | name after .ENDS optional; nested definitions UNVERIFIED; duplicate port names = error |
 | `.LIB entry` | `.ENDL [entry]` | |
 | `.IF (cond)` / `.ELSEIF (cond)` / `.ELSE` | `.ENDIF` | nestable; `.else if` UNVERIFIED; not allowed inside: `.END .ALTER .GLOBAL .DEL LIB .MALIAS .ALIAS .LIST .NOLIST .CONNECT` |
-| `.DATA name p1 p2 …` (+ value rows, or `MER`/`LAM FILE=…`) | `.ENDDATA` | ≤ 50 params |
+| `.DATA name p1 p2 …` (+ value rows, or `MER`/`LAM FILE=…`); the `+` is optional, names may stand on their own line (Commands E-2010.12 examples) | `.ENDDATA` | ≤ 50 params |
 | `.PROTECT`/`.PROT` | `.UNPROTECT`/`.UNPROT` | see encryption above |
 | `.VARIATION` | `.END_VARIATION` | contains `.GLOBAL_VARIATION`, `.LOCAL_VARIATION` (with `.ELEMENT_VARIATION`), `.SPATIAL_VARIATION` and matching `.END_*`; own sub-language (lines without dot: `option`, `parameter`, `nmos nch vth0=…`) |
 | `.DESIGN_EXPLORATION` | `.END_DESIGN_EXPLORATION` | |
@@ -316,7 +317,7 @@ RF analyses (accept): `.HB .HBAC .HBXF .HBLIN .HBLSP .HBNOISE .HBOSC .SN .SNAC .
 `DegF`, `DegFN`, `DegFP`, `Frequency` (H-2013.03). `RelTotalTime` accepts the units sec, min, hr, day, yr.
 Restrictions [V] (User Guide E-2010.12, ch. 29): DC/AC analyses and sweeps (`SWEEP`, Monte Carlo) are supported
 only in post-stress runs with `SimMode=1`; a sweep in a stress run aborts HSPICE 2025 (observed), so vary values
-with `.ALTER`.
+with `.ALTER`. `.DC` is not possible with MOSRA LEVEL=3 models (user report, HSPICE 2025).
 The stress phase runs during `.TRAN`. "The MOSRA model cannot be changed in alters."
 
 ### IBIS / field solver (accept)
