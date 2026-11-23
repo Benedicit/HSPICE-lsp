@@ -253,6 +253,19 @@ fn model_and_port_rules() {
 }
 
 #[test]
+fn params_keyword_is_ignored_in_subckt_headers_and_instances() {
+    let subckt =
+        ".subckt inv in out vdd gnd PARAMS: wn=1u\nR2 in out 'wn*1e9'\nR3 vdd gnd 1\n.ends\n";
+    let instances =
+        "X1 a 0 0 0 inv wn=2u\nX2 a 0 0 0 inv PARAMS: wn=2u\nX3 a 0 0 0 inv params: wn=2u m=2\n";
+    assert!(only(&format!("{BASE}{subckt}{instances}"), &[]));
+    assert!(has(
+        &format!("{BASE}{subckt}X1 a 0 0 inv params: wn=2u\n"),
+        "port-count"
+    ));
+}
+
+#[test]
 fn port_count_message_lists_ports() {
     let text = format!(
         "{BASE}.subckt inv in out vdd gnd\nR2 in out 1\nR3 vdd gnd 1\n.ends\nX1 a 0 0 inv\n"

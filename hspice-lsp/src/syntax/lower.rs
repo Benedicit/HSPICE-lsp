@@ -144,8 +144,23 @@ fn lower_element(node: Node, text: &str) -> StatementKind {
     let Some(name) = field_ident(node, kinds::FIELD_NAME, text) else {
         return StatementKind::Error;
     };
-    let args = lower_args(unfielded_children(node), text);
+    let instance = name.key.starts_with('x');
+    let args = lower_args(unfielded_children(node), text)
+        .into_iter()
+        .filter(|arg| {
+            !(instance
+                && matches!(arg, Arg::Value(Value::Word(word)) if is_params_keyword(&word.text)))
+        })
+        .collect();
     StatementKind::Element(Element { name, args })
+}
+
+/// Returns true for the PSpice-style `PARAMS:` keyword before subcircuit parameters (accepted and ignored).
+///
+/// # Arguments
+/// * `word` - word text
+fn is_params_keyword(word: &str) -> bool {
+    word.eq_ignore_ascii_case("params:")
 }
 
 /// Lowers a dot-command node; returns `None` for ERROR nodes and unknown kinds.
@@ -240,7 +255,10 @@ fn lower_subckt(node: Node, text: &str) -> CommandKind {
         .collect();
     CommandKind::Subckt {
         name: field_ident(node, kinds::FIELD_SUBCKT, text),
-        ports: field_idents(node, kinds::FIELD_PORT, text),
+        ports: field_idents(node, kinds::FIELD_PORT, text)
+            .into_iter()
+            .filter(|port| !is_params_keyword(&port.text))
+            .collect(),
         params,
     }
 }
@@ -640,6 +658,27 @@ mod tests {
         assert_eq!(name.map(|name| name.key), Some("inv".to_string()));
         assert_eq!(ports.len(), 3);
         assert_eq!(params[0].name.key, "wn");
+    }
+
+    #[test]
+    fn ignores_params_keyword_in_subckt_header_and_instances() {
+        let StatementKind::Command(command) = only_statement(".subckt inv in out PARAMS: wn=1u\n")
+        else {
+            panic!("expected command");
+        };
+        let CommandKind::Subckt { ports, params, .. } = command.kind else {
+            panic!("expected .subckt");
+        };
+        assert_eq!(ports.len(), 2);
+        assert_eq!(params[0].name.key, "wn");
+        let StatementKind::Element(instance) = only_statement("X1 a b inv params: wn=2u\n") else {
+            panic!("expected element");
+        };
+        assert_eq!(instance.args.len(), 4);
+        let StatementKind::Element(resistor) = only_statement("R1 a params: 1k\n") else {
+            panic!("expected element");
+        };
+        assert_eq!(resistor.args.len(), 3);
     }
 
     #[test]

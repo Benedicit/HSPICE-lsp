@@ -1,4 +1,4 @@
--- HSPICE support: tree-sitter language registration and .inc/.pm filetype detection.
+-- HSPICE support: tree-sitter language registration and .inc/.lib/.pm filetype detection.
 if vim.g.loaded_hspice_plugin then
   return
 end
@@ -26,12 +26,22 @@ local function is_spice_line(line)
   return command ~= nil and SPICE_COMMANDS[command:lower()] == true
 end
 
+---Check whether the first non-blank line is a SPICE comment (`*` in column 1).
+---@param lines string[] Buffer lines.
+---@return boolean starts_with_comment True if the first non-blank line starts with `*`.
+local function starts_with_comment(lines)
+  local first = vim.iter(lines):find(function(line)
+    return line:find("%S") ~= nil
+  end)
+  return first ~= nil and first:sub(1, 1) == "*"
+end
+
 ---Check whether the buffer's first lines contain SPICE syntax.
 ---@param bufnr integer Buffer number.
----@return boolean looks_like_spice True if any scanned line looks like SPICE.
+---@return boolean looks_like_spice True if the buffer starts with a `*` comment or any scanned line looks like SPICE.
 local function buffer_looks_like_spice(bufnr)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, SCAN_LINE_COUNT, false)
-  return vim.iter(lines):any(is_spice_line)
+  return starts_with_comment(lines) or vim.iter(lines):any(is_spice_line)
 end
 
 ---Build a filetype detection function for an extension.
@@ -55,6 +65,9 @@ local detect = require("vim.filetype.detect")
 vim.filetype.add({
   extension = {
     inc = make_detector(detect.inc),
+    lib = make_detector(function()
+      return "faust"
+    end),
     pm = make_detector(detect.pm),
   },
 })

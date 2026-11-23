@@ -62,7 +62,7 @@ local function check_filetype()
     vim.health.error(("filetype `spice` maps to parser `%s`, expected `hspice`"):format(tostring(lang)))
   end
   if vim.g.loaded_hspice_plugin then
-    vim.health.ok("plugin/hspice.lua loaded (.inc/.pm detection active)")
+    vim.health.ok("plugin/hspice.lua loaded (.inc/.lib/.pm detection active)")
   else
     vim.health.error("plugin/hspice.lua not loaded")
   end

@@ -303,7 +303,7 @@ fn unquote(text: &str) -> String {
 /// * `scan` - scanned logical line
 fn root_proposal(env: Env, scan: &LineScan) -> Option<Proposal> {
     if scan.in_first_word() {
-        return line_start_proposal(scan);
+        return line_start_proposal(env, scan);
     }
     if scan.is_command() {
         command_proposal(env, scan)
@@ -312,15 +312,19 @@ fn root_proposal(env: Env, scan: &LineScan) -> Option<Proposal> {
     }
 }
 
-/// Proposes commands and element templates for the first word of a line.
+/// Proposes commands, element templates and subcircuit instances for the first word of a line.
 ///
 /// # Arguments
+/// * `env` - cursor environment
 /// * `scan` - scanned logical line
-fn line_start_proposal(scan: &LineScan) -> Option<Proposal> {
+fn line_start_proposal(env: Env, scan: &LineScan) -> Option<Proposal> {
     let word = scan.current_word();
     let candidates = match word.chars().next() {
         Some('.') => sources::commands(),
-        Some(_) => sources::elements(),
+        Some(_) => sources::elements()
+            .into_iter()
+            .chain(sources::subckt_instances(env))
+            .collect(),
         None => sources::commands()
             .into_iter()
             .chain(sources::elements())
@@ -713,6 +717,49 @@ mod tests {
         assert!(has(&found, "0"));
     }
 
+    fn instance_snippet(opened: &Opened) -> (String, u32) {
+        complete(opened)
+            .iter()
+            .find(|item| {
+                item.label == "inv"
+                    && item.insert_text_format == Some(ls_types::InsertTextFormat::SNIPPET)
+            })
+            .map(edit_text)
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn completes_subckt_instance_snippets() {
+        let text = "* t\n.subckt inv in out vdd gnd wn=1u\n.ends\ninv|";
+        assert_eq!(
+            instance_snippet(&open(text)),
+            (
+                "${1:x_inv} ${2:in} ${3:out} ${4:vdd} ${5:gnd} inv".to_string(),
+                0
+            )
+        );
+    }
+
+    #[test]
+    fn subckt_instance_names_are_unique_per_scope() {
+        let subckt = ".subckt inv in out vdd gnd\n.ends\n";
+        let taken = "x_inv a b c 0 inv\nX_INV_1 a b c 0 inv\n";
+        let nested = ".subckt buf a y vdd gnd\nx_inv a y vdd gnd inv\n";
+        let name = |marked: String| instance_snippet(&open(&marked)).0;
+        assert!(name(format!("* t\n{subckt}{taken}inv|")).starts_with("${1:x_inv_2} "));
+        assert!(name(format!("* t\n{subckt}{nested}.ends\ninv|")).starts_with("${1:x_inv} "));
+        assert!(name(format!("* t\n{subckt}{nested}inv|\n.ends\n")).starts_with("${1:x_inv_1} "));
+    }
+
+    #[test]
+    fn completes_instances_of_included_subckts() {
+        let text = "* t\n.include 'cells/inv.inc'\ninv|\n.end\n";
+        assert_eq!(
+            instance_snippet(&open_in_fixtures(text)).0,
+            "${1:x_inv} ${2:in} ${3:out} ${4:vdd} ${5:gnd} inv"
+        );
+    }
+
     #[test]
     fn completes_on_crlf_continuation_lines() {
         let opened = open("* t\r\n.subckt inv in out\r\n.ends\r\nX1 a\r\n+ b i|");
@@ -734,6 +781,17 @@ mod tests {
         assert!(has(&found, "wp="));
         assert!(has(&found, "M="));
         assert!(!has(&found, "inv"));
+    }
+
+    #[test]
+    fn instance_param_defaults_come_from_the_subckt_file() {
+        let text = "* t\n.include 'cells/inv.inc'\nX2 a b vdd 0 inv |\n.end\n";
+        let details: Vec<(String, Option<String>)> = complete(&open_in_fixtures(text))
+            .into_iter()
+            .map(|item| (item.label, item.detail))
+            .collect();
+        assert!(details.contains(&("wn=".to_string(), Some("default 200n".to_string()))));
+        assert!(details.contains(&("wp=".to_string(), Some("default 400n".to_string()))));
     }
 
     #[test]

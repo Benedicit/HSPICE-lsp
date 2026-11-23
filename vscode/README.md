@@ -4,8 +4,9 @@ Language support for Synopsys HSPICE netlists, powered by the `hspice-lsp` langu
 diagnostics, completion, hover, go to definition, references, rename, symbols, folding, semantic
 highlighting, inlay hints, signature help and quick fixes.
 
-Platform packages bundle the server. Files ending in `.sp`/`.spice` open as HSPICE, and `.inc`/`.pm`
-files do too when one of their first 100 lines starts with an HSPICE dot command.
+Platform packages bundle the server. Files ending in `.sp`/`.spice` open as HSPICE, and `.inc`/`.lib`/`.pm`
+files do too when their first non-blank line is a `*` comment or one of their first 100 lines starts with
+an HSPICE dot command.
 
 Settings live under `hspice.*` (see the Settings UI). `hspice.server.path` points to another server binary.
 Run **HSPICE: Restart Language Server** after replacing it.

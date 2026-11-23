@@ -141,6 +141,21 @@ end)
 report(has_tran, "completion offers .TRAN")
 vim.api.nvim_buf_set_lines(bufnr, line_count, line_count + 1, false, {})
 
+-- Instance snippet for the subckt name `inv` (from cells/inv.inc) typed at the start of a line.
+vim.api.nvim_buf_set_lines(bufnr, line_count, line_count, false, { "inv" })
+local instance = request(client, bufnr, "textDocument/completion", {
+  textDocument = { uri = vim.uri_from_bufnr(bufnr) },
+  position = make_position("inv", line_count, 3, encoding),
+})
+local snippet = vim.iter(instance and (instance.items or instance) or {}):find(function(item)
+  return item.label == "inv" and item.insertTextFormat == 2
+end)
+report(
+  snippet ~= nil and snippet.textEdit.newText == "${1:x_inv} ${2:in} ${3:out} ${4:vdd} ${5:gnd} inv",
+  "completion offers the inv instance snippet"
+)
+vim.api.nvim_buf_set_lines(bufnr, line_count, line_count + 1, false, {})
+
 -- Hover on the first .param name.
 local param_row, param_line = find_line(bufnr, "^%s*%.[Pp][Aa][Rr][Aa][Mm]%s+%S")
 if param_row and param_line then
@@ -172,6 +187,30 @@ if x_row and x_line then
   report(uri ~= nil and uri:match("inv%.inc$") ~= nil, "definition of subckt resolves to inv.inc")
 else
   report(false, "fixture has an X instance line")
+end
+
+-- Filetype detection of .inc/.lib files: dot commands, a `*` comment first line, C headers.
+local scratch = vim.fn.tempname()
+vim.fn.mkdir(scratch, "p")
+vim.fn.writefile({ "* comment", "X1 a b vdd 0 inv" }, vim.fs.joinpath(scratch, "frag.inc"))
+vim.fn.writefile({ "#define X 1", "/*", " * comment", " */" }, vim.fs.joinpath(scratch, "c_header.inc"))
+local detect_cases = {
+  { path = vim.fs.joinpath(root, "hspice-lsp/tests/fixtures/models/tech.lib"), spice = true },
+  { path = vim.fs.joinpath(scratch, "frag.inc"), spice = true },
+  { path = vim.fs.joinpath(scratch, "c_header.inc"), spice = false },
+}
+for _, case in ipairs(detect_cases) do
+  vim.cmd.edit(vim.fn.fnameescape(case.path))
+  vim.cmd("filetype detect")
+  local buf = vim.api.nvim_get_current_buf()
+  local name = vim.fs.basename(case.path)
+  report((vim.bo[buf].filetype == "spice") == case.spice, ("%s detected as %s"):format(name, vim.bo[buf].filetype))
+  if case.spice then
+    local has_client = vim.wait(TIMEOUT_MS, function()
+      return #vim.lsp.get_clients({ bufnr = buf, name = "hspice" }) > 0
+    end, 50)
+    report(has_client, name .. " has the hspice client attached")
+  end
 end
 
 os.exit(failures > 0 and 1 or 0)

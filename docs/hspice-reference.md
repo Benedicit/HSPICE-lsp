@@ -127,7 +127,7 @@ CONFLICT must be *accepted silently* (no error diagnostics).
 ### Param commands and scoping [V]
 - `.PARAM`, `.PARAMETER`, `.PARAMETERS` (IBIS-ISS: any truncation down to `.PARA`).
 - `.PARAM n=val|'expr'|n2|Dist(args)|OPTxxx(init,lo,hi[,delta])|str('s') [n2=…]`. Bare `.PARAM` illegal.
-- `.SUBCKT name n1 n2 p=v …` — bare `key=val` defaults; **no `PARAMS:` keyword** (accept leniently).
+- `.SUBCKT name n1 n2 p=v …` — bare `key=val` defaults; **no `PARAMS:` keyword** (accept leniently: the server ignores a PSpice-style `PARAMS:` in `.SUBCKT` headers and X lines).
 - Instance overrides `X1 a b name p=v`. A `.PARAM` inside a subckt is local to it and below.
 - `.OPTION PARHIER=GLOBAL|LOCAL` (default GLOBAL). GLOBAL priority: sweep > .PARAM > instance > subckt
   default. LOCAL: sweep > instance > subckt default > .PARAM.

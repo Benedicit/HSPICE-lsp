@@ -29,7 +29,7 @@ Everything is based solely upon publicly available manuals/reference sheets onli
   - `data=` without `.data` block, nodes initialised twice by `.ic`/`.nodeset`, `.print`/`.probe`/`.ic` without arguments
   - output signals `v()`/`i()` in `.param` or `.measure PARAM=`, `.measure` keywords used as parameter names, `.elseif`/`.else` after `.else`
   - `.measure` functions given a constant instead of an output variable (`INTEG 5`, `AVG vdd`), `FROM` without `TO`
-- **Completion**: dot commands and element templates (snippets, HSPICE keywords in uppercase), subckts, models matching the element type, nodes, parameters, functions, instance/model parameters, source functions, `.option` names, analysis and `.measure` keywords, output variables, include paths and `.lib` sections, documented values after `key=`, `.data` names after `data=`, the block name after `.ends`/`.endl`, and the arguments of `.mosraprint`, `.appendmodel` and `.mosra_subckt_pin_volt`.
+- **Completion**: dot commands and element templates (snippets, HSPICE keywords in uppercase), instance snippets when typing a subckt name at the start of a line (`x_<name> <ports> <name>`), subckts, models matching the element type, nodes, parameters, functions, instance/model parameters, source functions, `.option` names, analysis and `.measure` keywords, output variables, include paths and `.lib` sections, documented values after `key=`, `.data` names after `data=`, the block name after `.ends`/`.endl`, and the arguments of `.mosraprint`, `.appendmodel` and `.mosra_subckt_pin_volt`.
 - **Hover**: command synopses with argument descriptions, element terminal mapping, parameter values (evaluated), subckt and model cards, node connections, number values (`10M` = 1e-2).
 - **Navigation**: go to definition (including into `.include`/`.lib` files and all model bins), find references, document highlight, rename.
 - **Structure**: document and workspace symbols, folding ranges (each opt-in: blocks with `folding.blocks`, `.alter` sections with `folding.alter`, comment runs with `folding.comments`, `+` continued statements with `folding.continuations`).
@@ -135,9 +135,9 @@ The Neovim plugin creates no keymaps. Use your own `LspAttach` mappings.
 
 ## File types
 
-Neovim already maps `.sp` and `.spice` to the filetype `spice`. The plugin also detects `.inc` and `.pm` files as `spice` when one of the first 100 lines starts with a known HSPICE dot command (`.subckt`, `.model`, `.param`, `.include`, `.lib`, …). Otherwise Neovim's built-in detection applies, so Perl modules and C/Pascal include files keep their filetypes. The tree-sitter parser `hspice` is registered for the `spice` filetype.
+Neovim already maps `.sp` and `.spice` to the filetype `spice`. The plugin also detects `.inc`, `.lib` and `.pm` files as `spice` when the first non-blank line is a `*` comment or one of the first 100 lines starts with a known HSPICE dot command (`.subckt`, `.model`, `.param`, `.include`, `.lib`, …). Otherwise Neovim's built-in detection applies, so Perl modules, Faust libraries and C/Pascal include files keep their filetypes. The tree-sitter parser `hspice` is registered for the `spice` filetype.
 
-VS Code opens `.sp` and `.spice` as HSPICE and applies the same `.inc`/`.pm` check once per file, so choosing another language mode afterwards sticks.
+VS Code opens `.sp` and `.spice` as HSPICE and applies the same `.inc`/`.lib`/`.pm` check once per file, so choosing another language mode afterwards sticks.
 
 ## Troubleshooting
 
@@ -152,7 +152,7 @@ VS Code opens `.sp` and `.spice` as HSPICE and applies the same `.inc`/`.pm` che
 - `tree-sitter-hspice/`: tree-sitter grammar for HSPICE.
 - `hspice-lsp/`: the Rust language server. It uses `#![forbid(unsafe_code)]`. The only `unsafe` in the workspace is the two-line generated FFI declaration in `tree-sitter-hspice/bindings/rust/lib.rs`, which tree-sitter requires.
 - `plugin/`, `lsp/`, `lua/`, `ftplugin/`, `queries/`: the Neovim plugin (filetype detection, native LSP config, health check, highlight queries).
-- `vscode/`: the VS Code extension (language client, `.inc`/`.pm` detection, TextMate grammar, smoke test).
+- `vscode/`: the VS Code extension (language client, `.inc`/`.lib`/`.pm` detection, TextMate grammar, smoke test).
 - `scripts/`: local build, packaging (used by CI) and the headless Neovim smoke test.
 - `.github/workflows/ci.yml`: the CI pipeline. Every push and pull request runs the tests: generated-parser check, grammar corpus, rustfmt, clippy, unit and end-to-end tests, and the Neovim and VS Code smoke tests. Pushes to `main` additionally build the Linux, macOS and Windows packages in parallel.
 - `.github/workflows/release.yml`: publishing a GitHub release attaches the packages from the CI run of the released commit. That commit must have been pushed to `main`, and CI artifacts expire after 90 days.
@@ -169,7 +169,7 @@ XDG_STATE_HOME=$TMPDIR XDG_DATA_HOME=$TMPDIR XDG_CACHE_HOME=$TMPDIR \
 
 The Neovim smoke test needs `bin/hspice-lsp` and `parser/hspice.so` from `scripts/build-local.sh`. It starts the server on `hspice-lsp/tests/fixtures/inverter_tb.sp` and checks attach, diagnostics, completion, hover and go-to-definition. Pass another fixture path as an argument to override the default.
 
-The VS Code smoke test (`vscode/test/`) downloads VS Code, or uses the one in `VSCODE_EXECUTABLE`, and checks the same features plus `.inc`/`.pm` detection.
+The VS Code smoke test (`vscode/test/`) downloads VS Code, or uses the one in `VSCODE_EXECUTABLE`, and checks the same features plus `.inc`/`.lib`/`.pm` detection.
 
 ## License
 

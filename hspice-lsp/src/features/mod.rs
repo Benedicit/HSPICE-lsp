@@ -111,7 +111,20 @@ pub fn symbol_location(
 /// * `document` - analysed document (used for local symbols)
 /// * `symbol` - symbol whose definition text is returned
 pub fn definition_text<'a>(document: &'a Document, symbol: &'a Symbol) -> &'a str {
-    let range = symbol.definition_range;
+    text_in_symbol_file(document, symbol, symbol.definition_range)
+}
+
+/// Returns the source text of a range inside the file a symbol comes from.
+///
+/// # Arguments
+/// * `document` - analysed document (used for local symbols)
+/// * `symbol` - symbol whose file is read
+/// * `range` - byte range inside that file
+pub fn text_in_symbol_file<'a>(
+    document: &'a Document,
+    symbol: &'a Symbol,
+    range: TextRange,
+) -> &'a str {
     match &symbol.origin {
         Origin::Local => document.slice(range),
         Origin::External(file) => file.text.get(range.start..range.end).unwrap_or_default(),

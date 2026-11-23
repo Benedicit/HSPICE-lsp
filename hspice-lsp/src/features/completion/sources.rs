@@ -9,7 +9,7 @@ use super::candidate::{Candidate, escape_snippet};
 use crate::analysis::blocks::BlockKind;
 use crate::analysis::includes::{read_source, resolve_include_path};
 use crate::analysis::symbols::{ROOT_SCOPE, ScopeId, Symbol, SymbolDetail, SymbolKind, bin_base};
-use crate::features::{argument_docs, definition_text};
+use crate::features::{argument_docs, definition_text, text_in_symbol_file};
 use crate::lang::commands::COMMANDS;
 use crate::lang::elements::{ELEMENTS, ElementSpec, SOURCE_FUNCTIONS};
 use crate::lang::functions::{FUNCTIONS, SPECIAL_VARIABLES};
@@ -196,6 +196,60 @@ pub fn subckts(env: Env, typed_ports: Option<usize>) -> Vec<Candidate> {
         .collect()
 }
 
+/// Returns one instance snippet `x_<name> <ports> <name>` per visible subcircuit, with the instance name and ports as placeholders.
+///
+/// # Arguments
+/// * `env` - cursor environment
+pub fn subckt_instances(env: Env) -> Vec<Candidate> {
+    let analysis = &env.document.analysis;
+    analysis
+        .visible_symbols(SymbolKind::Subckt, env.scope)
+        .into_iter()
+        .map(|id| &analysis.symbols[id])
+        .filter_map(|symbol| match &symbol.detail {
+            SymbolDetail::Subckt { ports, .. } => Some((symbol, ports)),
+            _ => None,
+        })
+        .map(|(symbol, ports)| {
+            let instance = escape_snippet(&instance_name(env, &symbol.name.text));
+            let placeholders = ports
+                .iter()
+                .zip(2..)
+                .map(|(port, index)| format!("${{{index}:{}}}", escape_snippet(&port.text)));
+            let snippet = std::iter::once(format!("${{1:{instance}}}"))
+                .chain(placeholders)
+                .chain(std::iter::once(escape_snippet(&symbol.name.text)))
+                .collect::<Vec<_>>()
+                .join(" ");
+            Candidate::new(symbol.name.text.clone(), CompletionItemKind::SNIPPET)
+                .snippet(snippet)
+                .detail(subckt_header(symbol))
+                .documentation(format!(
+                    "```spice\n{}\n```",
+                    first_line(definition_text(env.document, symbol))
+                ))
+                .sort("4")
+        })
+        .collect()
+}
+
+/// Returns `x_<subckt>`, or `x_<subckt>_<n>` with the smallest `n` if that name is taken in the cursor scope.
+///
+/// # Arguments
+/// * `env` - cursor environment
+/// * `subckt` - subcircuit name
+fn instance_name(env: Env, subckt: &str) -> String {
+    let table = &env.document.analysis.table;
+    std::iter::once(format!("x_{subckt}"))
+        .chain((1..).map(|n| format!("x_{subckt}_{n}")))
+        .find(|name| {
+            table
+                .in_scope(SymbolKind::Element, env.scope, &name.to_ascii_lowercase())
+                .is_empty()
+        })
+        .unwrap_or_default()
+}
+
 /// Returns the models whose type is one of `types`, binned names collapsed.
 ///
 /// # Arguments
@@ -270,18 +324,18 @@ pub fn subckt_params(env: Env, subckt: &str) -> Vec<Candidate> {
     let analysis = &env.document.analysis;
     let params: Vec<Candidate> = analysis
         .lookup(SymbolKind::Subckt, env.scope, subckt)
-        .map(|id| &analysis.symbols[id].detail)
+        .map(|id| &analysis.symbols[id])
         .into_iter()
-        .flat_map(|detail| match detail {
-            SymbolDetail::Subckt { params, .. } => params.clone(),
+        .flat_map(|symbol| match &symbol.detail {
+            SymbolDetail::Subckt { params, .. } => {
+                params.iter().map(|param| (symbol, param)).collect()
+            }
             _ => Vec::new(),
         })
-        .map(|param| {
+        .map(|(symbol, param)| {
             let default = param.value.as_ref().map_or(String::new(), |_| {
-                env.document
-                    .text
-                    .get(param.range.start..param.range.end)
-                    .and_then(|text| text.split_once('='))
+                text_in_symbol_file(env.document, symbol, param.range)
+                    .split_once('=')
                     .map_or(String::new(), |(_, value)| value.trim().to_string())
             });
             Candidate::new(

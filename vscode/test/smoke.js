@@ -1,4 +1,6 @@
 // Headless end-to-end test of the extension (the counterpart of scripts/nvim-smoke.lua).
+const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const vscode = require("vscode");
 
@@ -19,14 +21,16 @@ async function waitFor(message, check) {
   throw new Error(`FAIL: ${message}`);
 }
 
-/** Opens a fixture in an editor (by URI, since a language switch replaces the document object). */
+/** Opens a fixture (or an absolute path) in an editor (by URI, since a language switch replaces the document object). */
 async function open(relative) {
-  const editor = await vscode.window.showTextDocument(vscode.Uri.file(path.join(fixtures, relative)));
+  const editor = await vscode.window.showTextDocument(vscode.Uri.file(path.resolve(fixtures, relative)));
   return editor.document;
 }
 
 exports.run = async function run() {
-  for (const name of ["inverter_tb.sp", "cells/inv.inc", "models/ptm45.pm"]) {
+  const fragment = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "hspice-smoke-")), "frag.inc");
+  fs.writeFileSync(fragment, "* comment\nX1 a b vdd 0 inv\n");
+  for (const name of ["inverter_tb.sp", "cells/inv.inc", "models/ptm45.pm", "models/tech.lib", fragment]) {
     const { uri } = await open(name);
     await waitFor(`${name} has language hspice`, () =>
       vscode.workspace.textDocuments.some(
@@ -69,5 +73,18 @@ exports.run = async function run() {
       new vscode.Position(1, 3),
     );
     return list.items.some((item) => (item.label.label ?? item.label) === ".TRAN");
+  });
+
+  const instance = await vscode.workspace.openTextDocument({
+    language: "hspice",
+    content: "* t\n.subckt inv in out\n.ends\ninv",
+  });
+  await waitFor("completion offers the inv instance snippet", async () => {
+    const list = await vscode.commands.executeCommand(
+      "vscode.executeCompletionItemProvider",
+      instance.uri,
+      new vscode.Position(3, 3),
+    );
+    return list.items.some((item) => (item.insertText?.value ?? item.insertText) === "${1:x_inv} ${2:in} ${3:out} inv");
   });
 };

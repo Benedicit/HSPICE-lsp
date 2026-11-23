@@ -5,7 +5,7 @@ import { LanguageClient } from "vscode-languageclient/node";
 
 const SCAN_LINE_COUNT = 100;
 
-/** Dot commands that mark a `.inc`/`.pm` file as an HSPICE netlist (same list as plugin/hspice.lua). */
+/** Dot commands that mark a `.inc`/`.lib`/`.pm` file as an HSPICE netlist (same list as plugin/hspice.lua). */
 const SPICE_COMMANDS = new Set([
   "subckt", "macro", "ends", "eom", "param", "parameter", "parameters", "model", "include", "inc", "incl",
   "lib", "endl", "global", "option", "options", "opt", "tran", "ac", "dc", "op", "end", "data", "measure",
@@ -72,21 +72,21 @@ function serverCommand(context: vscode.ExtensionContext): string {
   return fs.existsSync(bundled) ? bundled : "hspice-lsp";
 }
 
-/** Switches a `.inc`/`.pm` file to HSPICE once if one of its first lines is an HSPICE dot command. */
+/** Switches a `.inc`/`.lib`/`.pm` file to HSPICE once if it starts with a `*` comment or one of its first lines is an HSPICE dot command. */
 function detectLanguage(document: vscode.TextDocument): void {
   const key = document.uri.toString();
-  if (!/\.(inc|pm)$/i.test(document.fileName) || checked.has(key)) {
+  if (!/\.(inc|lib|pm)$/i.test(document.fileName) || checked.has(key)) {
     return;
   }
   checked.add(key);
   const lineCount = Math.min(document.lineCount, SCAN_LINE_COUNT);
-  for (let line = 0; line < lineCount; line++) {
-    const command = /^\s*\.([a-z]+)/i.exec(document.lineAt(line).text)?.[1];
-    if (command && SPICE_COMMANDS.has(command.toLowerCase())) {
-      if (document.languageId !== "hspice") {
-        void vscode.languages.setTextDocumentLanguage(document, "hspice");
-      }
-      return;
-    }
+  const lines = Array.from({ length: lineCount }, (_, line) => document.lineAt(line).text);
+  const startsWithComment = lines.find((text) => text.trim() !== "")?.startsWith("*") ?? false;
+  const hasCommand = lines.some((text) => {
+    const command = /^\s*\.([a-z]+)/i.exec(text)?.[1];
+    return command !== undefined && SPICE_COMMANDS.has(command.toLowerCase());
+  });
+  if ((startsWithComment || hasCommand) && document.languageId !== "hspice") {
+    void vscode.languages.setTextDocumentLanguage(document, "hspice");
   }
 }
